@@ -256,6 +256,15 @@ class LocalDatabase {
 class CloudDatabase {
   static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
+  static Future<bool> hasInternetConnection() async {
+    try {
+      final result = await InternetAddress.lookup('google.com');
+      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
+    } on SocketException catch (_) {
+      return false;
+    }
+  }
+
   // Sync inventory data to Firestore under the current user's UID
   static Future<void> syncInventoryToCloud() async {
     if (currentFirebaseUser == null) return;
@@ -1994,6 +2003,17 @@ class _SetupScreenState extends State<SetupScreen> {
                         }
                         final messenger = ScaffoldMessenger.of(context);
                         Navigator.pop(context);
+
+                        if (!await CloudDatabase.hasInternetConnection()) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text("Failed: No internet connection!"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
                         messenger.showSnackBar(
                           const SnackBar(
                             content: Text("Exporting to cloud..."),
@@ -2076,6 +2096,17 @@ class _SetupScreenState extends State<SetupScreen> {
                         }
                         final messenger = ScaffoldMessenger.of(context);
                         Navigator.pop(context);
+
+                        if (!await CloudDatabase.hasInternetConnection()) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text("Failed: No internet connection!"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
                         messenger.showSnackBar(
                           const SnackBar(
                             content: Text("Importing from cloud..."),
