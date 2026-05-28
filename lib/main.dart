@@ -31,7 +31,8 @@ void main() async {
 }
 
 // Global key to allow rebuilding the root app widget when theme changes
-final GlobalKey<_SmartBillingAppState> smartBillingAppKey = GlobalKey<_SmartBillingAppState>();
+final GlobalKey<_SmartBillingAppState> smartBillingAppKey =
+    GlobalKey<_SmartBillingAppState>();
 
 class SmartBillingApp extends StatefulWidget {
   SmartBillingApp({super.key});
@@ -50,10 +51,52 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blueGrey,
-          brightness: currentThemeSetting == "LIGHT" ? Brightness.light : Brightness.dark,
+          seedColor: Colors.deepPurpleAccent,
+          brightness: currentThemeSetting == "LIGHT"
+              ? Brightness.light
+              : Brightness.dark,
         ),
         useMaterial3: true,
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            elevation: 2,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: currentThemeSetting == "LIGHT"
+              ? Colors.grey.shade100
+              : Colors.black26,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(
+              color: Colors.deepPurpleAccent,
+              width: 1.5,
+            ),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+        ),
+        dialogTheme: const DialogThemeData(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(28))),
+          elevation: 8,
+        ),
+        cardTheme: const CardThemeData(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+          elevation: 2,
+          margin: EdgeInsets.all(8),
+        ),
       ),
       home: const DashboardScreen(),
     );
@@ -73,7 +116,7 @@ class LocalDatabase {
     final prefs = await SharedPreferences.getInstance();
     String? uriString = prefs.getString('settings_folder_uri');
     if (uriString == null) return null;
-    
+
     final rootUri = Uri.parse(uriString);
     var billingAppFolder = await saf.child(rootUri, "Billing APP");
     if (billingAppFolder == null) {
@@ -102,7 +145,12 @@ class LocalDatabase {
       final content = jsonEncode(globalInventory);
       final bytes = Uint8List.fromList(utf8.encode(content));
       if (file == null) {
-        await saf.createFileAsBytes(settingsUri, mimeType: 'application/json', displayName: 'inventory_db.json', bytes: bytes);
+        await saf.createFileAsBytes(
+          settingsUri,
+          mimeType: 'application/json',
+          displayName: 'inventory_db.json',
+          bytes: bytes,
+        );
       } else {
         await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
@@ -147,7 +195,12 @@ class LocalDatabase {
       });
       final bytes = Uint8List.fromList(utf8.encode(content));
       if (file == null) {
-        await saf.createFileAsBytes(settingsUri, mimeType: 'application/json', displayName: 'app_settings.json', bytes: bytes);
+        await saf.createFileAsBytes(
+          settingsUri,
+          mimeType: 'application/json',
+          displayName: 'app_settings.json',
+          bytes: bytes,
+        );
       } else {
         await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
@@ -211,12 +264,19 @@ class CloudDatabase {
       // Convert the inventory map to a JSON-safe format for Firestore
       Map<String, dynamic> inventoryData = {};
       globalInventory.forEach((key, value) {
-        inventoryData[key] = value.map((item) => Map<String, String>.from(item)).toList();
+        inventoryData[key] = value
+            .map((item) => Map<String, String>.from(item))
+            .toList();
       });
-      await _firestore.collection('users').doc(uid).collection('data').doc('inventory').set({
-        'inventory': inventoryData,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('inventory')
+          .set({
+            'inventory': inventoryData,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
     } catch (e) {
       debugPrint("Error syncing inventory to cloud: $e");
     }
@@ -227,11 +287,18 @@ class CloudDatabase {
     if (currentFirebaseUser == null) return;
     try {
       final uid = currentFirebaseUser!.uid;
-      final doc = await _firestore.collection('users').doc(uid).collection('data').doc('inventory').get();
+      final doc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('inventory')
+          .get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         if (data['inventory'] != null) {
-          Map<String, dynamic> decoded = Map<String, dynamic>.from(data['inventory']);
+          Map<String, dynamic> decoded = Map<String, dynamic>.from(
+            data['inventory'],
+          );
           Map<String, List<Map<String, String>>> loadedInventory = {};
           decoded.forEach((key, value) {
             loadedInventory[key] = (value as List)
@@ -253,12 +320,17 @@ class CloudDatabase {
     if (currentFirebaseUser == null) return;
     try {
       final uid = currentFirebaseUser!.uid;
-      await _firestore.collection('users').doc(uid).collection('data').doc('settings').set({
-        'layout': currentLayoutSetting,
-        'shopName': globalShopName,
-        'theme': currentThemeSetting,
-        'lastUpdated': FieldValue.serverTimestamp(),
-      });
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('settings')
+          .set({
+            'layout': currentLayoutSetting,
+            'shopName': globalShopName,
+            'theme': currentThemeSetting,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
     } catch (e) {
       debugPrint("Error syncing settings to cloud: $e");
     }
@@ -269,7 +341,12 @@ class CloudDatabase {
     if (currentFirebaseUser == null) return;
     try {
       final uid = currentFirebaseUser!.uid;
-      final doc = await _firestore.collection('users').doc(uid).collection('data').doc('settings').get();
+      final doc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('settings')
+          .get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         currentLayoutSetting = data['layout'] ?? "SBL";
@@ -306,23 +383,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _checkPermissionsAndInit() async {
     final prefs = await SharedPreferences.getInstance();
     String? baseUriString = prefs.getString('settings_folder_uri');
-    
-    if (baseUriString == null || !(await saf.isPersistedUri(Uri.parse(baseUriString)))) {
+
+    if (baseUriString == null ||
+        !(await saf.isPersistedUri(Uri.parse(baseUriString)))) {
       if (mounted) {
         await showDialog(
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-            title: const Text("STORAGE REQUIRED", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-            content: const Text("Please select a folder to save your bills and inventory backups safely. We recommend to choose the 'Documents' folder."),
+            title: const Text(
+              "STORAGE REQUIRED",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blueGrey,
+              ),
+            ),
+            content: const Text(
+              "Please select a folder to save your bills and inventory backups safely. We recommend to choose the 'Documents' folder.",
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text("CHOOSE FOLDER", style: TextStyle(fontWeight: FontWeight.bold)),
-              )
-            ]
-          )
+                child: const Text(
+                  "CHOOSE FOLDER",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
         );
       }
       final uri = await saf.openDocumentTree(persistablePermission: true);
@@ -332,7 +420,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return; // User cancelled
       }
     }
-    
+
     await LocalDatabase.loadFromDisk();
     await LocalDatabase.loadAppSettings();
 
@@ -354,9 +442,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           barrierDismissible: false,
           builder: (BuildContext ctx) {
             return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
               child: Container(
                 padding: const EdgeInsets.all(20),
                 child: Column(
@@ -390,9 +475,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.green,
                                 foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
                               ),
                               onPressed: () => Navigator.of(ctx).pop(true),
                               child: const Text(
@@ -413,9 +495,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
                               ),
                               onPressed: () => Navigator.of(ctx).pop(false),
                               child: const Text(
@@ -593,9 +672,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final pathUri = await LocalDatabase.getMyBillsFolderUri();
     if (pathUri != null) {
-      await saf.createFileAsBytes(pathUri, mimeType: 'application/pdf', displayName: "$finalFileName.pdf", bytes: await pdf.save());
+      await saf.createFileAsBytes(
+        pathUri,
+        mimeType: 'application/pdf',
+        displayName: "$finalFileName.pdf",
+        bytes: await pdf.save(),
+      );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
         setState(() => _cart = []);
       }
     }
@@ -610,7 +696,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         child: StatefulBuilder(
           builder: (context, setPopupState) {
             return Container(
@@ -641,7 +726,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     decoration: InputDecoration(
                       hintText: "Enter Name (In English Only)...",
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -670,7 +755,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Theme.of(context).brightness == Brightness.dark
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
                                   ? Colors.blueGrey[200]
                                   : Colors.blueGrey,
                               letterSpacing: 0.5,
@@ -679,7 +766,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           const SizedBox(width: 4),
                           Checkbox(
                             value: globalShowRateSetting,
-                            activeColor: Theme.of(context).brightness == Brightness.dark
+                            activeColor:
+                                Theme.of(context).brightness == Brightness.dark
                                 ? Colors.blueGrey[400]
                                 : Colors.blueGrey[800],
                             materialTapTargetSize:
@@ -704,11 +792,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ? Colors.green
                                   : Colors.grey[300],
                               foregroundColor: Colors.black,
-                              elevation: isNameTyped ? 2 : 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: EdgeInsets.zero,
                             ),
                             onPressed: !isNameTyped
                                 ? null
@@ -738,10 +821,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: EdgeInsets.zero,
                             ),
                             onPressed: () {
                               Navigator.pop(context);
@@ -764,10 +843,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: EdgeInsets.zero,
                             ),
                             onPressed: () {
                               Navigator.pop(context);
@@ -841,7 +916,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         child: StatefulBuilder(
           builder: (context, setPopupState) {
             List<String> allowedUnits = [];
@@ -920,21 +994,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).brightness == Brightness.dark
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
                                   ? (editingQty
-                                      ? Colors.blue[900]!.withOpacity(0.3)
-                                      : Colors.blueGrey[900])
+                                        ? Colors.blue[900]!.withOpacity(0.3)
+                                        : Colors.blueGrey[900])
                                   : (editingQty
-                                      ? Colors.blue[50]
-                                      : Colors.grey[100]),
+                                        ? Colors.blue[50]
+                                        : Colors.grey[100]),
                               border: Border.all(
                                 color: editingQty
                                     ? Colors.blue
-                                    : (Theme.of(context).brightness == Brightness.dark
-                                        ? Colors.blueGrey[700]!
-                                        : Colors.grey.shade300),
+                                    : (Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.blueGrey[700]!
+                                          : Colors.grey.shade300),
                               ),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Column(
                               children: [
@@ -960,21 +1037,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).brightness == Brightness.dark
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
                                   ? (!editingQty
-                                      ? Colors.blue[900]!.withOpacity(0.3)
-                                      : Colors.blueGrey[900])
+                                        ? Colors.blue[900]!.withOpacity(0.3)
+                                        : Colors.blueGrey[900])
                                   : (!editingQty
-                                      ? Colors.blue[50]
-                                      : Colors.grey[100]),
+                                        ? Colors.blue[50]
+                                        : Colors.grey[100]),
                               border: Border.all(
                                 color: !editingQty
                                     ? Colors.blue
-                                    : (Theme.of(context).brightness == Brightness.dark
-                                        ? Colors.blueGrey[700]!
-                                        : Colors.grey.shade300),
+                                    : (Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.blueGrey[700]!
+                                          : Colors.grey.shade300),
                               ),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Column(
                               children: [
@@ -1069,9 +1149,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.green,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
                       ),
                       onPressed: () {
                         double q = double.tryParse(localQty) ?? 0;
@@ -1140,9 +1217,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context, setCartState) {
           double cartTotal = _cart.fold(0, (sum, item) => sum + item['total']);
           return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
             child: Container(
               padding: const EdgeInsets.all(15),
               child: Column(
@@ -1218,11 +1292,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           child: Container(
                                             padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
-                                              color: Theme.of(context).brightness == Brightness.dark
+                                              color:
+                                                  Theme.of(
+                                                        context,
+                                                      ).brightness ==
+                                                      Brightness.dark
                                                   ? Colors.blueGrey[800]
                                                   : Colors.blueGrey[50],
                                               borderRadius:
-                                                  BorderRadius.circular(8),
+                                                  BorderRadius.circular(16),
                                             ),
                                             child: Column(
                                               crossAxisAlignment:
@@ -1241,7 +1319,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 Text(
                                                   "${cartItem['qty']} ${cartItem['unit']} x ₹${cartItem['rate']}",
                                                   style: TextStyle(
-                                                    color: Theme.of(context).brightness == Brightness.dark
+                                                    color:
+                                                        Theme.of(
+                                                              context,
+                                                            ).brightness ==
+                                                            Brightness.dark
                                                         ? Colors.grey[300]
                                                         : Colors.grey[700],
                                                     fontSize: 13,
@@ -1257,15 +1339,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         flex: 2,
                                         child: ElevatedButton(
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Theme.of(context).brightness == Brightness.dark
-                                                ? Colors.red[900]!.withOpacity(0.4)
+                                            backgroundColor:
+                                                Theme.of(context).brightness ==
+                                                    Brightness.dark
+                                                ? Colors.red[900]!.withOpacity(
+                                                    0.4,
+                                                  )
                                                 : Colors.red[100],
-                                            padding: EdgeInsets.zero,
+
                                             elevation: 0,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
                                           ),
                                           onPressed: () async {
                                             bool confirm =
@@ -1305,13 +1387,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ? null
                                 : () => _showCustomerNamePopup(),
                             style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(context).brightness == Brightness.dark
-                                      ? Colors.blueGrey[700]
-                                      : Colors.blueGrey[900],
+                              backgroundColor:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.blueGrey[700]
+                                  : Colors.blueGrey[900],
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
                             ),
                             child: Text(
                               "GENERATE BILL (₹${cartTotal.toStringAsFixed(2)})",
@@ -1346,10 +1427,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.white,
                               elevation: 1,
-                              padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
                             ),
                             child: const Icon(Icons.delete_sweep, size: 28),
                           ),
@@ -1375,7 +1452,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: InputDecoration(
           hintText: "Search Item Name...",
           prefixIcon: const Icon(Icons.search),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20)),
         ),
       ),
     );
@@ -1446,12 +1523,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final isDark = Theme.of(context).brightness == Brightness.dark;
           return ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+              backgroundColor: isDark
+                  ? Colors.blueGrey[800]
+                  : Colors.blueGrey[50],
               foregroundColor: isDark ? Colors.white : Colors.blueGrey[900],
               elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+
               padding: const EdgeInsets.symmetric(horizontal: 4),
             ),
             onPressed: () =>
@@ -1516,16 +1593,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       String displayString = regName.isNotEmpty
                           ? "$baseName ($regName)"
                           : baseName;
-                      final isDark = Theme.of(context).brightness == Brightness.dark;
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
                       return ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isDark
                               ? Colors.orange[900]!.withOpacity(0.3)
                               : Colors.orange[50],
-                          foregroundColor: isDark ? Colors.orange[100] : Colors.blueGrey[900],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                          foregroundColor: isDark
+                              ? Colors.orange[100]
+                              : Colors.blueGrey[900],
+
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                         ),
                         onPressed: () => _showItemEntryPopup(item),
@@ -1546,7 +1624,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                               "₹${item['rate']}",
                               style: TextStyle(
-                                color: isDark ? Colors.orange[200] : Colors.blueGrey[600],
+                                color: isDark
+                                    ? Colors.orange[200]
+                                    : Colors.blueGrey[600],
                                 fontSize: 11,
                               ),
                             ),
@@ -1697,14 +1777,15 @@ class _SetupScreenState extends State<SetupScreen> {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      final UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithCredential(credential);
 
       setState(() {
         currentFirebaseUser = userCredential.user;
@@ -1714,7 +1795,9 @@ class _SetupScreenState extends State<SetupScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Signed in successfully! Use 'IMPORT FROM CLOUD' to sync data."),
+            content: Text(
+              "Signed in successfully! Use 'IMPORT FROM CLOUD' to sync data.",
+            ),
             backgroundColor: Colors.green,
           ),
         );
@@ -1768,9 +1851,9 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Sign-out error: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Sign-out error: $e")));
       }
     }
   }
@@ -1784,11 +1867,16 @@ class _SetupScreenState extends State<SetupScreen> {
       final content = jsonEncode(globalInventory);
       final bytes = Uint8List.fromList(utf8.encode(content));
       if (file == null) {
-        await saf.createFileAsBytes(backupUri, mimeType: 'application/json', displayName: 'inventory_data.json', bytes: bytes);
+        await saf.createFileAsBytes(
+          backupUri,
+          mimeType: 'application/json',
+          displayName: 'inventory_data.json',
+          bytes: bytes,
+        );
       } else {
         await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
-      
+
       // Create a cache copy for sharing
       final tempDir = Directory.systemTemp;
       final tempFile = File('${tempDir.path}/inventory_data.json');
@@ -1874,7 +1962,6 @@ class _SetupScreenState extends State<SetupScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         title: const Center(
           child: Text(
             "BACKUP OPTIONS",
@@ -1898,15 +1985,28 @@ class _SetupScreenState extends State<SetupScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         if (currentFirebaseUser == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please sign in first!")));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Please sign in first!"),
+                            ),
+                          );
                           return;
                         }
                         final messenger = ScaffoldMessenger.of(context);
                         Navigator.pop(context);
-                        messenger.showSnackBar(const SnackBar(content: Text("Exporting to cloud...")));
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text("Exporting to cloud..."),
+                          ),
+                        );
                         await CloudDatabase.syncInventoryToCloud();
                         await CloudDatabase.syncSettingsToCloud();
-                        messenger.showSnackBar(const SnackBar(content: Text("Export complete!"), backgroundColor: Colors.green));
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text("Export complete!"),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
                       },
                       icon: const Icon(Icons.cloud_upload_outlined),
                       label: const Text(
@@ -1925,7 +2025,6 @@ class _SetupScreenState extends State<SetupScreen> {
                             bottomLeft: Radius.circular(8),
                           ),
                         ),
-                        padding: EdgeInsets.zero,
                       ),
                     ),
                   ),
@@ -1950,7 +2049,6 @@ class _SetupScreenState extends State<SetupScreen> {
                             bottomRight: Radius.circular(8),
                           ),
                         ),
-                        padding: EdgeInsets.zero,
                       ),
                       child: const Icon(Icons.share, size: 20),
                     ),
@@ -1969,16 +2067,29 @@ class _SetupScreenState extends State<SetupScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () async {
                         if (currentFirebaseUser == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please sign in first!")));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Please sign in first!"),
+                            ),
+                          );
                           return;
                         }
                         final messenger = ScaffoldMessenger.of(context);
                         Navigator.pop(context);
-                        messenger.showSnackBar(const SnackBar(content: Text("Importing from cloud...")));
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text("Importing from cloud..."),
+                          ),
+                        );
                         await CloudDatabase.loadInventoryFromCloud();
                         await CloudDatabase.loadSettingsFromCloud();
                         smartBillingAppKey.currentState?.rebuildApp();
-                        messenger.showSnackBar(const SnackBar(content: Text("Import complete!"), backgroundColor: Colors.green));
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text("Import complete!"),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
                       },
                       icon: const Icon(Icons.cloud_download_outlined),
                       label: const Text(
@@ -1997,7 +2108,6 @@ class _SetupScreenState extends State<SetupScreen> {
                             bottomLeft: Radius.circular(8),
                           ),
                         ),
-                        padding: EdgeInsets.zero,
                       ),
                     ),
                   ),
@@ -2022,7 +2132,6 @@ class _SetupScreenState extends State<SetupScreen> {
                             bottomRight: Radius.circular(8),
                           ),
                         ),
-                        padding: EdgeInsets.zero,
                       ),
                       child: const Icon(Icons.file_open, size: 20),
                     ),
@@ -2035,30 +2144,46 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
     );
   }
+
   void _showAppSettingsMenu() {
     String tempShopName = globalShopName;
     String tempTheme = currentThemeSetting;
     String tempLayout = currentLayoutSetting;
-    final TextEditingController shopNameController = TextEditingController(text: tempShopName);
+    final TextEditingController shopNameController = TextEditingController(
+      text: tempShopName,
+    );
 
     void showUnsavedWarning() {
       showDialog(
         context: context,
         builder: (warnContext) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          title: const Text("UNSAVED CHANGES", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-          content: const Text("You have unsaved changes. Are you sure you want to close without saving?"),
+          title: const Text(
+            "UNSAVED CHANGES",
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            "You have unsaved changes. Are you sure you want to close without saving?",
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(warnContext), // close warning
-              child: const Text("CANCEL", style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                "CANCEL",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             TextButton(
               onPressed: () {
                 Navigator.pop(warnContext); // close warning
                 Navigator.pop(context); // close app settings menu
               },
-              child: const Text("DISCARD", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              child: const Text(
+                "DISCARD",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
@@ -2071,7 +2196,6 @@ class _SetupScreenState extends State<SetupScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setPopupState) {
           return Dialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             child: SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
@@ -2079,38 +2203,92 @@ class _SetupScreenState extends State<SetupScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text("APP SETTINGS", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                    const SizedBox(height: 20),
-                    
-                    const Text("SHOP NAME", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 5),
-                    TextField(
-                      controller: shopNameController,
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9 ]'))],
-                      decoration: InputDecoration(hintText: "Enter Shop Name", border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15)),
-                      onChanged: (val) { tempShopName = val; },
+                    const Text(
+                      "APP SETTINGS",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
+                      ),
                     ),
                     const SizedBox(height: 20),
 
-                    const Text("THEME", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const Text(
+                      "SHOP NAME",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    TextField(
+                      controller: shopNameController,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'[a-zA-Z0-9 ]'),
+                        ),
+                      ],
+                      decoration: InputDecoration(
+                        hintText: "Enter Shop Name",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 15,
+                        ),
+                      ),
+                      onChanged: (val) {
+                        tempShopName = val;
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    const Text(
+                      "THEME",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 5),
                     Row(
                       children: [
                         Expanded(
                           child: InkWell(
-                            onTap: () => setPopupState(() => tempTheme = "LIGHT"),
+                            onTap: () =>
+                                setPopupState(() => tempTheme = "LIGHT"),
                             child: Container(
                               height: 60,
                               decoration: BoxDecoration(
-                                color: tempTheme == "LIGHT" ? Colors.blue.withOpacity(0.1) : Colors.transparent,
-                                border: Border.all(color: tempTheme == "LIGHT" ? Colors.blue : Colors.grey),
-                                borderRadius: BorderRadius.circular(10),
+                                color: tempTheme == "LIGHT"
+                                    ? Colors.blue.withOpacity(0.1)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: tempTheme == "LIGHT"
+                                      ? Colors.blue
+                                      : Colors.grey,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  const Icon(Icons.wb_sunny, size: 40, color: Colors.black12),
-                                  Text("LIGHT", style: TextStyle(fontWeight: FontWeight.bold, color: tempTheme == "LIGHT" ? Colors.blue : Colors.grey)),
+                                  const Icon(
+                                    Icons.wb_sunny,
+                                    size: 40,
+                                    color: Colors.black12,
+                                  ),
+                                  Text(
+                                    "LIGHT",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: tempTheme == "LIGHT"
+                                          ? Colors.blue
+                                          : Colors.grey,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -2119,19 +2297,38 @@ class _SetupScreenState extends State<SetupScreen> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: InkWell(
-                            onTap: () => setPopupState(() => tempTheme = "DARK"),
+                            onTap: () =>
+                                setPopupState(() => tempTheme = "DARK"),
                             child: Container(
                               height: 60,
                               decoration: BoxDecoration(
-                                color: tempTheme == "DARK" ? Colors.indigo.withOpacity(0.1) : Colors.transparent,
-                                border: Border.all(color: tempTheme == "DARK" ? Colors.indigo : Colors.grey),
-                                borderRadius: BorderRadius.circular(10),
+                                color: tempTheme == "DARK"
+                                    ? Colors.indigo.withOpacity(0.1)
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: tempTheme == "DARK"
+                                      ? Colors.indigo
+                                      : Colors.grey,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: Stack(
                                 alignment: Alignment.center,
                                 children: [
-                                  const Icon(Icons.nightlight_round, size: 40, color: Colors.black12),
-                                  Text("DARK", style: TextStyle(fontWeight: FontWeight.bold, color: tempTheme == "DARK" ? Colors.indigo : Colors.grey)),
+                                  const Icon(
+                                    Icons.nightlight_round,
+                                    size: 40,
+                                    color: Colors.black12,
+                                  ),
+                                  Text(
+                                    "DARK",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: tempTheme == "DARK"
+                                          ? Colors.indigo
+                                          : Colors.grey,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -2141,15 +2338,39 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    const Text("LAYOUT", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const Text(
+                      "LAYOUT",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const SizedBox(height: 5),
                     Column(
                       children: [
-                        _buildLayoutOption(title: "SEARCH BAR LAYOUT", icon: Icons.search, layoutCode: "SBL", currentSelection: tempLayout, onTap: () => setPopupState(() => tempLayout = "SBL")),
+                        _buildLayoutOption(
+                          title: "SEARCH BAR LAYOUT",
+                          icon: Icons.search,
+                          layoutCode: "SBL",
+                          currentSelection: tempLayout,
+                          onTap: () => setPopupState(() => tempLayout = "SBL"),
+                        ),
                         const SizedBox(height: 8),
-                        _buildLayoutOption(title: "DIRECT GRID LAYOUT", icon: Icons.grid_view, layoutCode: "DGL", currentSelection: tempLayout, onTap: () => setPopupState(() => tempLayout = "DGL")),
+                        _buildLayoutOption(
+                          title: "DIRECT GRID LAYOUT",
+                          icon: Icons.grid_view,
+                          layoutCode: "DGL",
+                          currentSelection: tempLayout,
+                          onTap: () => setPopupState(() => tempLayout = "DGL"),
+                        ),
                         const SizedBox(height: 8),
-                        _buildLayoutOption(title: "HYBRID LAYOUT", icon: Icons.dashboard_customize, layoutCode: "HL", currentSelection: tempLayout, onTap: () => setPopupState(() => tempLayout = "HL")),
+                        _buildLayoutOption(
+                          title: "HYBRID LAYOUT",
+                          icon: Icons.dashboard_customize,
+                          layoutCode: "HL",
+                          currentSelection: tempLayout,
+                          onTap: () => setPopupState(() => tempLayout = "HL"),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -2158,24 +2379,37 @@ class _SetupScreenState extends State<SetupScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey[200],
+                              foregroundColor: Colors.black87,
+                            ),
                             onPressed: () {
-                              if (tempShopName != globalShopName || tempTheme != currentThemeSetting || tempLayout != currentLayoutSetting) {
+                              if (tempShopName != globalShopName ||
+                                  tempTheme != currentThemeSetting ||
+                                  tempLayout != currentLayoutSetting) {
                                 showUnsavedWarning();
                               } else {
                                 Navigator.pop(context);
                               }
                             },
-                            child: const Text("CLOSE", style: TextStyle(fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              "CLOSE",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
                             onPressed: () async {
                               String entry = shopNameController.text.trim();
-                              globalShopName = entry.isEmpty ? "RETAIL INVOICE" : entry.toUpperCase();
+                              globalShopName = entry.isEmpty
+                                  ? "RETAIL INVOICE"
+                                  : entry.toUpperCase();
                               currentThemeSetting = tempTheme;
                               currentLayoutSetting = tempLayout;
                               await LocalDatabase.saveAppSettings();
@@ -2184,7 +2418,10 @@ class _SetupScreenState extends State<SetupScreen> {
                                 smartBillingAppKey.currentState?.rebuildApp();
                               }
                             },
-                            child: const Text("SAVE", style: TextStyle(fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              "SAVE",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ],
@@ -2199,18 +2436,40 @@ class _SetupScreenState extends State<SetupScreen> {
     );
   }
 
-  Widget _buildLayoutOption({required String title, required IconData icon, required String layoutCode, required String currentSelection, required VoidCallback onTap}) {
+  Widget _buildLayoutOption({
+    required String title,
+    required IconData icon,
+    required String layoutCode,
+    required String currentSelection,
+    required VoidCallback onTap,
+  }) {
     bool isSelected = currentSelection == layoutCode;
     return InkWell(
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade300), borderRadius: BorderRadius.circular(10), color: isSelected ? Colors.blue.withOpacity(0.05) : Colors.transparent),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: isSelected ? Colors.blue : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          color: isSelected
+              ? Colors.blue.withOpacity(0.05)
+              : Colors.transparent,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
         child: Row(
           children: [
             Icon(icon, color: isSelected ? Colors.blue : Colors.grey),
             const SizedBox(width: 15),
-            Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.blue : null))),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isSelected ? Colors.blue : null,
+                ),
+              ),
+            ),
             if (isSelected) const Icon(Icons.check_circle, color: Colors.blue),
           ],
         ),
@@ -2239,7 +2498,11 @@ class _SetupScreenState extends State<SetupScreen> {
         child: Column(
           children: [
             InkWell(
-              onTap: _isSigningIn ? null : (currentFirebaseUser == null ? _handleGoogleSignIn : _handleSignOut),
+              onTap: _isSigningIn
+                  ? null
+                  : (currentFirebaseUser == null
+                        ? _handleGoogleSignIn
+                        : _handleSignOut),
               child: Container(
                 width: double.infinity,
                 height: 60,
@@ -2247,10 +2510,12 @@ class _SetupScreenState extends State<SetupScreen> {
                   color: currentFirebaseUser == null
                       ? (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50])
                       : Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: currentFirebaseUser == null
-                        ? (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200)
+                        ? (isDark
+                              ? Colors.blueGrey[700]!
+                              : Colors.blueGrey.shade200)
                         : Colors.green,
                   ),
                 ),
@@ -2270,7 +2535,11 @@ class _SetupScreenState extends State<SetupScreen> {
                                 if (currentFirebaseUser == null)
                                   const Icon(Icons.login, size: 20)
                                 else
-                                  const Icon(Icons.check_circle, size: 20, color: Colors.green),
+                                  const Icon(
+                                    Icons.check_circle,
+                                    size: 20,
+                                    color: Colors.green,
+                                  ),
                                 const SizedBox(width: 8),
                                 Text(
                                   currentFirebaseUser == null
@@ -2308,9 +2577,11 @@ class _SetupScreenState extends State<SetupScreen> {
                 height: 60,
                 decoration: BoxDecoration(
                   color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
+                    color: isDark
+                        ? Colors.blueGrey[700]!
+                        : Colors.blueGrey.shade200,
                   ),
                 ),
                 child: const Center(
@@ -2329,9 +2600,11 @@ class _SetupScreenState extends State<SetupScreen> {
                 height: 60,
                 decoration: BoxDecoration(
                   color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(20),
                   border: Border.all(
-                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
+                    color: isDark
+                        ? Colors.blueGrey[700]!
+                        : Colors.blueGrey.shade200,
                   ),
                 ),
                 child: const Center(
@@ -2400,15 +2673,14 @@ class WarehouseScreen extends StatelessWidget {
                 icon: const Icon(Icons.inventory_2),
                 label: const Text("INVENTORY"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
                       ? Colors.blueGrey[800]
                       : Colors.blueGrey[50],
-                  foregroundColor: Theme.of(context).brightness == Brightness.dark
+                  foregroundColor:
+                      Theme.of(context).brightness == Brightness.dark
                       ? Colors.white
                       : Colors.blueGrey[900],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
                 ),
               ),
             ),
@@ -2426,15 +2698,14 @@ class WarehouseScreen extends StatelessWidget {
                 icon: const Icon(Icons.history),
                 label: const Text("HISTORY"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
                       ? Colors.blueGrey[800]
                       : Colors.blueGrey[50],
-                  foregroundColor: Theme.of(context).brightness == Brightness.dark
+                  foregroundColor:
+                      Theme.of(context).brightness == Brightness.dark
                       ? Colors.white
                       : Colors.blueGrey[900],
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
                 ),
               ),
             ),
@@ -2470,7 +2741,8 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   List<saf.DocumentFile> _allPdfFiles = [];
   List<saf.DocumentFile> _filteredPdfFiles = [];
-  final TextEditingController _historySearchController = TextEditingController();
+  final TextEditingController _historySearchController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -2481,21 +2753,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _loadHistory() async {
     final uri = await LocalDatabase.getMyBillsFolderUri();
     if (uri != null) {
-      final stream = saf.listFiles(uri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.lastModified, saf.DocumentFileColumn.size]);
+      final stream = saf.listFiles(
+        uri,
+        columns: [
+          saf.DocumentFileColumn.displayName,
+          saf.DocumentFileColumn.lastModified,
+          saf.DocumentFileColumn.size,
+        ],
+      );
       List<saf.DocumentFile> loadedFiles = [];
-      
+
       await for (var doc in stream) {
         if (doc.name != null && doc.name!.endsWith('.pdf')) {
           loadedFiles.add(doc);
         }
       }
-      
+
       loadedFiles.sort((a, b) {
         final aDate = a.lastModified ?? DateTime(2000);
         final bDate = b.lastModified ?? DateTime(2000);
         return bDate.compareTo(aDate);
       });
-      
+
       setState(() {
         _allPdfFiles = loadedFiles;
         _filteredPdfFiles = loadedFiles;
@@ -2580,7 +2859,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       )
                     : null,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
             ),
@@ -2598,7 +2877,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     itemCount: _filteredPdfFiles.length,
                     itemBuilder: (context, index) {
                       final file = _filteredPdfFiles[index];
-                      final isDark = Theme.of(context).brightness == Brightness.dark;
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -2614,16 +2894,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   child: Container(
                                     height: 58,
                                     decoration: BoxDecoration(
-                                      color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: isDark
+                                          ? Colors.blueGrey[800]
+                                          : Colors.blueGrey[50],
+                                      borderRadius: BorderRadius.circular(16),
                                     ),
                                     child: InkWell(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(16),
                                       onTap: () async {
                                         try {
-                                          final bytes = await saf.getDocumentContent(file.uri);
+                                          final bytes = await saf
+                                              .getDocumentContent(file.uri);
                                           if (bytes != null) {
-                                            final tempFile = File('${Directory.systemTemp.path}/${file.name}');
+                                            final tempFile = File(
+                                              '${Directory.systemTemp.path}/${file.name}',
+                                            );
                                             await tempFile.writeAsBytes(bytes);
                                             OpenFilex.open(tempFile.path);
                                           }
@@ -2649,7 +2934,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w600,
                                                   fontSize: 13.5,
-                                                  color: isDark ? Colors.white : Colors.black87,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : Colors.black87,
                                                 ),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
@@ -2667,18 +2954,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   child: Container(
                                     height: 58,
                                     decoration: BoxDecoration(
-                                      color: isDark ? Colors.blueGrey[700] : Colors.blueGrey[100],
-                                      borderRadius: BorderRadius.circular(8),
+                                      color: isDark
+                                          ? Colors.blueGrey[700]
+                                          : Colors.blueGrey[100],
+                                      borderRadius: BorderRadius.circular(16),
                                     ),
                                     child: InkWell(
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(16),
                                       onTap: () async {
                                         try {
-                                          final bytes = await saf.getDocumentContent(file.uri);
+                                          final bytes = await saf
+                                              .getDocumentContent(file.uri);
                                           if (bytes != null) {
-                                            final tempFile = File('${Directory.systemTemp.path}/${file.name}');
+                                            final tempFile = File(
+                                              '${Directory.systemTemp.path}/${file.name}',
+                                            );
                                             await tempFile.writeAsBytes(bytes);
-                                            Share.shareXFiles([XFile(tempFile.path)], text: 'Invoice Sharing');
+                                            Share.shareXFiles([
+                                              XFile(tempFile.path),
+                                            ], text: 'Invoice Sharing');
                                           }
                                         } catch (e) {
                                           debugPrint("Error sharing file: $e");
@@ -2690,7 +2984,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                         children: [
                                           Icon(
                                             Icons.share,
-                                            color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
+                                            color: isDark
+                                                ? Colors.blueGrey[100]
+                                                : Colors.blueGrey,
                                             size: 20,
                                           ),
                                           const SizedBox(height: 2),
@@ -2699,7 +2995,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                             style: TextStyle(
                                               fontSize: 8.5,
                                               fontWeight: FontWeight.bold,
-                                              color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
+                                              color: isDark
+                                                  ? Colors.blueGrey[100]
+                                                  : Colors.blueGrey,
                                             ),
                                           ),
                                         ],
@@ -2737,9 +3035,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
             child: Container(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -2770,9 +3065,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
                             ),
                             onPressed: () => Navigator.pop(ctx, true),
                             child: const Text(
@@ -2790,9 +3082,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
                             ),
                             onPressed: () => Navigator.pop(ctx, false),
                             child: const Text(
@@ -2929,10 +3218,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         flex: 2,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                            backgroundColor:
+                                Theme.of(context).brightness == Brightness.dark
                                 ? Colors.red[900]!.withOpacity(0.4)
                                 : Colors.red[100],
-                            padding: EdgeInsets.zero,
                           ),
                           onPressed: () async {
                             bool confirm = await _showWarning(
@@ -2944,9 +3233,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                               setState(() {});
                             }
                           },
-                          child: const Text(
-                            "DEL",
-                            style: TextStyle(color: Colors.red),
+                          child: const Icon(
+                            Icons.delete,
+                            color: Colors.red,
                           ),
                         ),
                       ),
@@ -2987,9 +3276,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
             child: Container(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -3020,9 +3306,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
                             ),
                             onPressed: () => Navigator.pop(ctx, true),
                             child: const Text(
@@ -3040,9 +3323,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.red,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
                             ),
                             onPressed: () => Navigator.pop(ctx, false),
                             child: const Text(
@@ -3083,13 +3363,12 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   Widget _buildUnitSelectionButton(String unitLabel) {
     bool isCurrent = _selectedUnit == unitLabel;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2.0),
-        child: SizedBox(
-          height: 45,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+      child: SizedBox(
+        height: 45,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
               backgroundColor: isCurrent
                   ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800])
                   : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
@@ -3097,13 +3376,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                   ? (isDark ? Colors.black : Colors.white)
                   : (isDark ? Colors.white : Colors.blueGrey[900]),
               elevation: isCurrent ? 2 : 0,
-              padding: EdgeInsets.zero,
+
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(16),
                 side: BorderSide(
                   color: isCurrent
                       ? Colors.transparent
-                      : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200),
+                      : (isDark
+                            ? Colors.blueGrey[700]!
+                            : Colors.blueGrey.shade200),
                 ),
               ),
             ),
@@ -3126,7 +3407,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             ),
           ),
         ),
-      ),
     );
   }
 
@@ -3195,14 +3475,17 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 7,
-                  child: Row(
-                    children: [
-                      _buildUnitSelectionButton("Kg"),
-                      _buildUnitSelectionButton("Ltr"),
-                      _buildUnitSelectionButton("PCS"),
-                      _buildUnitSelectionButton("GRAM"),
-                      _buildUnitSelectionButton("ML"),
-                    ],
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildUnitSelectionButton("Kg"),
+                        _buildUnitSelectionButton("Ltr"),
+                        _buildUnitSelectionButton("PCS"),
+                        _buildUnitSelectionButton("GRAM"),
+                        _buildUnitSelectionButton("ML"),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -3260,7 +3543,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                   String formattedDisplayName = regName.isNotEmpty
                       ? "$baseName ($regName)"
                       : baseName;
-                  final isDark = Theme.of(context).brightness == Brightness.dark;
+                  final isDark =
+                      Theme.of(context).brightness == Brightness.dark;
 
                   return Padding(
                     key: ValueKey("item_row_${items[i]['name']}_$i"),
@@ -3281,7 +3565,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           decoration: BoxDecoration(
                             color: isEditing
                                 ? Colors.orange[800]
-                                : (isDark ? Colors.blueGrey[600] : Colors.blueGrey[400]),
+                                : (isDark
+                                      ? Colors.blueGrey[600]
+                                      : Colors.blueGrey[400]),
                             shape: BoxShape.circle,
                           ),
                           alignment: Alignment.center,
@@ -3312,9 +3598,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isEditing
-                                    ? (isDark ? Colors.orange[900]!.withOpacity(0.3) : Colors.orange[50])
-                                    : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
-                                borderRadius: BorderRadius.circular(8),
+                                    ? (isDark
+                                          ? Colors.orange[900]!.withOpacity(0.3)
+                                          : Colors.orange[50])
+                                    : (isDark
+                                          ? Colors.blueGrey[800]
+                                          : Colors.blueGrey[50]),
+                                borderRadius: BorderRadius.circular(16),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3325,14 +3615,18 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14.5,
-                                      color: isDark ? Colors.white : Colors.black87,
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black87,
                                     ),
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
                                     "₹${items[i]['rate']}/${items[i]['unit']}",
                                     style: TextStyle(
-                                      color: isDark ? Colors.grey[300] : Colors.grey[700],
+                                      color: isDark
+                                          ? Colors.grey[300]
+                                          : Colors.grey[700],
                                       fontSize: 12,
                                     ),
                                   ),
@@ -3347,9 +3641,12 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: isEditing
-                                  ? (isDark ? Colors.blueGrey[900] : Colors.grey[200])
-                                  : (isDark ? Colors.red[900]!.withOpacity(0.4) : Colors.red[100]),
-                              padding: EdgeInsets.zero,
+                                  ? (isDark
+                                        ? Colors.blueGrey[900]
+                                        : Colors.grey[200])
+                                  : (isDark
+                                        ? Colors.red[900]!.withOpacity(0.4)
+                                        : Colors.red[100]),
                             ),
                             onPressed: isEditing
                                 ? null
@@ -3363,9 +3660,10 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                       setState(() {});
                                     }
                                   },
-                            child: const Text(
-                              "DEL",
-                              style: TextStyle(color: Colors.red, fontSize: 10),
+                            child: const Icon(
+                              Icons.delete,
+                              color: Colors.red,
+                              size: 18,
                             ),
                           ),
                         ),
