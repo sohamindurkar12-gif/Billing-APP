@@ -69,7 +69,7 @@ User? currentFirebaseUser;
 
 // --- LOCAL STORAGE HELPER LOGIC ---
 class LocalDatabase {
-  static Future<Uri?> getSettingsFolderUri() async {
+  static Future<Uri?> getBaseFolderUri() async {
     final prefs = await SharedPreferences.getInstance();
     String? uriString = prefs.getString('settings_folder_uri');
     if (uriString != null) return Uri.parse(uriString);
@@ -79,6 +79,17 @@ class LocalDatabase {
       await prefs.setString('settings_folder_uri', uri.toString());
     }
     return uri;
+  }
+
+  static Future<Uri?> getSettingsFolderUri() async {
+    final baseUri = await getBaseFolderUri();
+    if (baseUri == null) return null;
+    var folder = await saf.child(baseUri, "INTERNAL_SETTINGS");
+    if (folder == null) {
+      var doc = await saf.createDirectory(baseUri, "INTERNAL_SETTINGS");
+      return doc?.uri;
+    }
+    return folder.uri;
   }
 
   static Future<void> saveToDisk() async {
@@ -164,10 +175,8 @@ class LocalDatabase {
   }
 
   static Future<Uri?> getBackupsFolderUri() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? uriString = prefs.getString('settings_folder_uri');
-    if (uriString == null) return null;
-    final baseUri = Uri.parse(uriString);
+    final baseUri = await getBaseFolderUri();
+    if (baseUri == null) return null;
     var folder = await saf.child(baseUri, "INVENTORY BACKUPS");
     if (folder == null) {
       var doc = await saf.createDirectory(baseUri, "INVENTORY BACKUPS");
@@ -177,10 +186,8 @@ class LocalDatabase {
   }
 
   static Future<Uri?> getMyBillsFolderUri() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? uriString = prefs.getString('settings_folder_uri');
-    if (uriString == null) return null;
-    final baseUri = Uri.parse(uriString);
+    final baseUri = await getBaseFolderUri();
+    if (baseUri == null) return null;
     var folder = await saf.child(baseUri, "MYBILLS");
     if (folder == null) {
       var doc = await saf.createDirectory(baseUri, "MYBILLS");
@@ -306,7 +313,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (ctx) => AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
             title: const Text("STORAGE REQUIRED", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-            content: const Text("Please select a folder to save your bills and inventory backups safely. We recommend creating a 'Billing App' folder."),
+            content: const Text("Please select a folder to save your bills and inventory backups safely. We recommend to choose the 'Documents' folder."),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
@@ -1702,11 +1709,14 @@ class _SetupScreenState extends State<SetupScreen> {
         _isSigningIn = false;
       });
 
-      // Load user's cloud data (inventory + settings)
-      await CloudDatabase.loadInventoryFromCloud();
-      await CloudDatabase.loadSettingsFromCloud();
-      smartBillingAppKey.currentState?.rebuildApp();
-      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Signed in successfully! Use 'IMPORT FROM CLOUD' to sync data."),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2456,10 +2466,9 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  List<File> _allPdfFiles = [];
-  List<File> _filteredPdfFiles = [];
-  final TextEditingController _historySearchController =
-      TextEditingController();
+  List<saf.DocumentFile> _allPdfFiles = [];
+  List<saf.DocumentFile> _filteredPdfFiles = [];
+  final TextEditingController _historySearchController = TextEditingController();
 
   @override
   void initState() {
@@ -2470,15 +2479,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<void> _loadHistory() async {
     final uri = await LocalDatabase.getMyBillsFolderUri();
     if (uri != null) {
-      final documents = await saf.listFiles(uri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.lastModified, saf.DocumentFileColumn.size]);
-      List<FileSystemEntity> loadedFiles = [];
+      final stream = saf.listFiles(uri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.lastModified, saf.DocumentFileColumn.size]);
+      List<saf.DocumentFile> loadedFiles = [];
       
-      // Because we must use FileSystemEntity interface in the list, we can create dummy files. 
-      // But wait! The UI uses file.path and file.statSync(). 
-      // I will just use the file name directly. 
+      await for (var doc in stream) {
+        if (doc.name != null && doc.name!.endsWith('.pdf')) {
+          loadedFiles.add(doc);
+        }
+      }
+      
+      loadedFiles.sort((a, b) {
+        final aDate = a.lastModified ?? DateTime(2000);
+        final bDate = b.lastModified ?? DateTime(2000);
+        return bDate.compareTo(aDate);
+      });
       
       setState(() {
-        // _historyFiles = loadedFiles; // This needs a larger refactor, let's keep it simple
+        _allPdfFiles = loadedFiles;
+        _filteredPdfFiles = loadedFiles;
       });
     }
   }
@@ -2493,7 +2511,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     setState(() {
       _filteredPdfFiles = _allPdfFiles.where((file) {
         String printableName = _parseInvoiceNameForDisplay(
-          file.path,
+          file.name ?? "",
         ).toLowerCase();
         return printableName.contains(query.toLowerCase());
       }).toList();
@@ -2599,7 +2617,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     ),
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(8),
-                                      onTap: () => OpenFilex.open(file.path),
+                                      onTap: () async {
+                                        try {
+                                          final bytes = await saf.getDocumentContent(file.uri);
+                                          if (bytes != null) {
+                                            final tempFile = File('${Directory.systemTemp.path}/${file.name}');
+                                            await tempFile.writeAsBytes(bytes);
+                                            OpenFilex.open(tempFile.path);
+                                          }
+                                        } catch (e) {
+                                          debugPrint("Error opening file: $e");
+                                        }
+                                      },
                                       child: Padding(
                                         padding: const EdgeInsets.all(12.0),
                                         child: Row(
@@ -2613,7 +2642,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                             Expanded(
                                               child: Text(
                                                 _parseInvoiceNameForDisplay(
-                                                  file.path,
+                                                  file.name ?? "Unknown",
                                                 ),
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w600,
@@ -2641,10 +2670,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     ),
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(8),
-                                      onTap: () {
-                                        Share.shareXFiles([
-                                          XFile(file.path),
-                                        ], text: 'Invoice Sharing');
+                                      onTap: () async {
+                                        try {
+                                          final bytes = await saf.getDocumentContent(file.uri);
+                                          if (bytes != null) {
+                                            final tempFile = File('${Directory.systemTemp.path}/${file.name}');
+                                            await tempFile.writeAsBytes(bytes);
+                                            Share.shareXFiles([XFile(tempFile.path)], text: 'Invoice Sharing');
+                                          }
+                                        } catch (e) {
+                                          debugPrint("Error sharing file: $e");
+                                        }
                                       },
                                       child: Column(
                                         mainAxisAlignment:
