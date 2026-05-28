@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:shared_storage/shared_storage.dart' as saf;
@@ -1868,92 +1868,122 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   // Internal logic to run an inventory save and return the written File handle (cached locally for sharing)
-  Future<File?> _executeSilentInventoryExport() async {
-    try {
-      final backupUri = await LocalDatabase.getBackupsFolderUri();
-      if (backupUri == null) return null;
-      var file = await saf.child(backupUri, 'inventory_data.json');
-      final content = jsonEncode(globalInventory);
-      final bytes = Uint8List.fromList(utf8.encode(content));
-      if (file == null) {
-        await saf.createFileAsBytes(
-          backupUri,
-          mimeType: 'application/json',
-          displayName: 'inventory_data.json',
-          bytes: bytes,
-        );
-      } else {
-        await saf.writeToFileAsBytes(file.uri, bytes: bytes);
-      }
-
-      // Create a cache copy for sharing
-      final tempDir = Directory.systemTemp;
-      final tempFile = File('${tempDir.path}/inventory_data.json');
-      await tempFile.writeAsBytes(bytes);
-      return tempFile;
-    } catch (e) {
-      debugPrint("Silent export handling issue: $e");
-    }
-    return null;
-  }
-
-  // Triggered via the 20% Export Share button
-  Future<void> _exportAndShareInventoryFile() async {
-    final File? file = await _executeSilentInventoryExport();
-    if (file != null && await file.exists()) {
-      await Share.shareXFiles([
-        XFile(file.path),
-      ], text: 'My Billing App Inventory Backup');
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Failed to compile or share local backup string."),
-          ),
-        );
-      }
-    }
-  }
-
-  // Triggered via the 20% Import button (Reads from the static local path completely offline)
-  Future<void> _importLocalBackupDirectlyFromFolder() async {
+  Future<void> _exportAndShareFiles(bool shareInventory, bool shareSettings) async {
     try {
       final backupUri = await LocalDatabase.getBackupsFolderUri();
       if (backupUri == null) return;
-      var file = await saf.child(backupUri, 'inventory_data.json');
-      if (file != null) {
-        final bytes = await saf.getDocumentContent(file.uri);
-        if (bytes != null) {
-          final content = utf8.decode(bytes);
-          Map<String, dynamic> decoded = jsonDecode(content);
-          Map<String, List<Map<String, String>>> verifiedInventory = {};
+      
+      List<XFile> filesToShare = [];
+      final tempDir = Directory.systemTemp;
 
-          decoded.forEach((key, value) {
-            verifiedInventory[key] = (value as List)
-                .map((item) => Map<String, String>.from(item))
-                .toList();
-          });
-
-          setState(() {
-            globalInventory = verifiedInventory;
-          });
-          await LocalDatabase.saveToDisk();
-          await LocalDatabase.saveAppSettings();
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Inventory successfully imported locally!"),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
+      if (shareInventory) {
+        var invFile = await saf.child(backupUri, 'inventory_data.json');
+        final content = jsonEncode(globalInventory);
+        final bytes = Uint8List.fromList(utf8.encode(content));
+        if (invFile == null) {
+          await saf.createFileAsBytes(
+            backupUri,
+            mimeType: 'application/json',
+            displayName: 'inventory_data.json',
+            bytes: bytes,
+          );
+        } else {
+          await saf.writeToFileAsBytes(invFile.uri, bytes: bytes);
         }
-      } else {
+        final tempInv = File("${tempDir.path}/inventory_data.json");
+        await tempInv.writeAsBytes(bytes);
+        filesToShare.add(XFile(tempInv.path));
+      }
+
+      if (shareSettings) {
+        var setFile = await saf.child(backupUri, 'app_settings.json');
+        final content = jsonEncode({
+          "layout": currentLayoutSetting,
+          "shopName": globalShopName,
+          "theme": currentThemeSetting,
+        });
+        final bytes = Uint8List.fromList(utf8.encode(content));
+        if (setFile == null) {
+          await saf.createFileAsBytes(
+            backupUri,
+            mimeType: 'application/json',
+            displayName: 'app_settings.json',
+            bytes: bytes,
+          );
+        } else {
+          await saf.writeToFileAsBytes(setFile.uri, bytes: bytes);
+        }
+        final tempSet = File("${tempDir.path}/app_settings.json");
+        await tempSet.writeAsBytes(bytes);
+        filesToShare.add(XFile(tempSet.path));
+      }
+
+      if (filesToShare.isNotEmpty) {
+        await Share.shareXFiles(filesToShare, text: 'My Billing App Backup');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to share backup: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _importLocalBackup(bool importInventory, bool importSettings) async {
+    try {
+      final backupUri = await LocalDatabase.getBackupsFolderUri();
+      if (backupUri == null) return;
+      
+      bool inventorySuccess = false;
+      bool settingsSuccess = false;
+
+      if (importInventory) {
+        var invFile = await saf.child(backupUri, 'inventory_data.json');
+        if (invFile != null) {
+          final bytes = await saf.getDocumentContent(invFile.uri);
+          if (bytes != null) {
+            final content = utf8.decode(bytes);
+            Map<String, dynamic> decoded = jsonDecode(content);
+            Map<String, List<Map<String, String>>> verifiedInventory = {};
+            decoded.forEach((key, value) {
+              verifiedInventory[key] = (value as List).map((item) => Map<String, String>.from(item)).toList();
+            });
+            globalInventory = verifiedInventory;
+            await LocalDatabase.saveToDisk();
+            inventorySuccess = true;
+          }
+        } else {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inventory backup file not found.")));
+        }
+      }
+
+      if (importSettings) {
+        var setFile = await saf.child(backupUri, 'app_settings.json');
+        if (setFile != null) {
+          final bytes = await saf.getDocumentContent(setFile.uri);
+          if (bytes != null) {
+            final content = utf8.decode(bytes);
+            Map<String, dynamic> decoded = jsonDecode(content);
+            currentLayoutSetting = decoded["layout"] ?? "SBL";
+            globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
+            currentThemeSetting = decoded["theme"] ?? "DARK";
+            await LocalDatabase.saveAppSettings();
+            settingsSuccess = true;
+          }
+        } else {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("App settings backup file not found.")));
+        }
+      }
+
+      if (inventorySuccess || settingsSuccess) {
+        setState(() {});
+        smartBillingAppKey.currentState?.rebuildApp();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("No 'inventory_data.json' backup found in folder."),
+              content: Text("Local import complete!"),
+              backgroundColor: Colors.green,
             ),
           );
         }
@@ -1966,216 +1996,244 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     }
   }
-
   void _showCenterBackupMenu() {
+    bool exportInventory = false;
+    bool exportSettings = false;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Center(
-          child: Text(
-            "BACKUP OPTIONS",
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.blueGrey,
-            ),
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // --- ROW 1: EXPORT SYSTEM (80% / 20%) ---
-            Row(
-              children: [
-                Expanded(
-                  flex: 8,
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        if (currentFirebaseUser == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Please sign in first!"),
-                            ),
-                          );
-                          return;
-                        }
-                        final messenger = ScaffoldMessenger.of(context);
-                        Navigator.pop(context);
-
-                        if (!await CloudDatabase.hasInternetConnection()) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text("Failed: No internet connection!"),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text("Exporting to cloud..."),
-                          ),
-                        );
-                        await CloudDatabase.syncInventoryToCloud();
-                        await CloudDatabase.syncSettingsToCloud();
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text("Export complete!"),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.cloud_upload_outlined),
-                      label: const Text(
-                        "EXPORT TO CLOUD",
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        disabledBackgroundColor: Colors.grey[200],
-                        disabledForegroundColor: Colors.grey[500],
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(8),
-                            bottomLeft: Radius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          bool anySelected = exportInventory || exportSettings;
+          return AlertDialog(
+            title: const Center(
+              child: Text(
+                "BACKUP OPTIONS",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueGrey,
                 ),
-                const SizedBox(width: 2),
-                Expanded(
-                  flex: 2,
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _exportAndShareInventoryFile();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey[100],
-                        foregroundColor: Colors.blueGrey[900],
-                        elevation: 1,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(
-                            topRight: Radius.circular(8),
-                            bottomRight: Radius.circular(8),
+              ),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: exportInventory,
+                          onChanged: (val) {
+                            setDialogState(() => exportInventory = val ?? false);
+                          },
+                        ),
+                        const Text("INVENTORY", style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: exportSettings,
+                          onChanged: (val) {
+                            setDialogState(() => exportSettings = val ?? false);
+                          },
+                        ),
+                        const Text("APP SETTINGS", style: TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // --- ROW 1: EXPORT SYSTEM (80% / 20%) ---
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 8,
+                      child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: !anySelected ? null : () async {
+                            if (currentFirebaseUser == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Please sign in first!")),
+                              );
+                              return;
+                            }
+                            final messenger = ScaffoldMessenger.of(context);
+                            Navigator.pop(context);
+
+                            if (!await CloudDatabase.hasInternetConnection()) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text("Failed: No internet connection!"),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text("Exporting to cloud...")),
+                            );
+                            if (exportInventory) await CloudDatabase.syncInventoryToCloud();
+                            if (exportSettings) await CloudDatabase.syncSettingsToCloud();
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text("Export complete!"),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.cloud_upload_outlined),
+                          label: const Text(
+                            "EXPORT TO CLOUD",
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            disabledBackgroundColor: Colors.grey[200],
+                            disabledForegroundColor: Colors.grey[500],
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                bottomLeft: Radius.circular(8),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                      child: const Icon(Icons.share, size: 20),
                     ),
-                  ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: !anySelected ? null : () {
+                            Navigator.pop(context);
+                            _exportAndShareFiles(exportInventory, exportSettings);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            disabledBackgroundColor: Colors.grey[200],
+                            disabledForegroundColor: Colors.grey[500],
+                            backgroundColor: Colors.blueGrey[100],
+                            foregroundColor: Colors.blueGrey[900],
+                            elevation: 1,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topRight: Radius.circular(8),
+                                bottomRight: Radius.circular(8),
+                              ),
+                            ),
+                          ),
+                          child: const Icon(Icons.share, size: 20),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(color: Colors.grey, thickness: 0.5),
+                const SizedBox(height: 12),
+                // --- ROW 2: IMPORT SYSTEM (80% / 20%) ---
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 8,
+                      child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: !anySelected ? null : () async {
+                            if (currentFirebaseUser == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Please sign in first!")),
+                              );
+                              return;
+                            }
+                            final messenger = ScaffoldMessenger.of(context);
+                            Navigator.pop(context);
+
+                            if (!await CloudDatabase.hasInternetConnection()) {
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text("Failed: No internet connection!"),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                              return;
+                            }
+
+                            messenger.showSnackBar(
+                              const SnackBar(content: Text("Importing from cloud...")),
+                            );
+                            if (exportInventory) await CloudDatabase.loadInventoryFromCloud();
+                            if (exportSettings) {
+                               await CloudDatabase.loadSettingsFromCloud();
+                               smartBillingAppKey.currentState?.rebuildApp();
+                            }
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text("Import complete!"),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.cloud_download_outlined),
+                          label: const Text(
+                            "IMPORT FROM CLOUD",
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            disabledBackgroundColor: Colors.grey[200],
+                            disabledForegroundColor: Colors.grey[500],
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(8),
+                                bottomLeft: Radius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      flex: 2,
+                      child: SizedBox(
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: !anySelected ? null : () {
+                            Navigator.pop(context);
+                            _importLocalBackup(exportInventory, exportSettings);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            disabledBackgroundColor: Colors.grey[200],
+                            disabledForegroundColor: Colors.grey[500],
+                            backgroundColor: Colors.blueGrey[100],
+                            foregroundColor: Colors.blueGrey[900],
+                            elevation: 1,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.only(
+                                topRight: Radius.circular(8),
+                                bottomRight: Radius.circular(8),
+                              ),
+                            ),
+                          ),
+                          child: const Icon(Icons.file_open, size: 20),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            // --- ROW 2: IMPORT SYSTEM (80% / 20%) ---
-            Row(
-              children: [
-                Expanded(
-                  flex: 8,
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () async {
-                        if (currentFirebaseUser == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Please sign in first!"),
-                            ),
-                          );
-                          return;
-                        }
-                        final messenger = ScaffoldMessenger.of(context);
-                        Navigator.pop(context);
-
-                        if (!await CloudDatabase.hasInternetConnection()) {
-                          messenger.showSnackBar(
-                            const SnackBar(
-                              content: Text("Failed: No internet connection!"),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                          return;
-                        }
-
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text("Importing from cloud..."),
-                          ),
-                        );
-                        await CloudDatabase.loadInventoryFromCloud();
-                        await CloudDatabase.loadSettingsFromCloud();
-                        smartBillingAppKey.currentState?.rebuildApp();
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            content: Text("Import complete!"),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.cloud_download_outlined),
-                      label: const Text(
-                        "IMPORT FROM CLOUD",
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        disabledBackgroundColor: Colors.grey[200],
-                        disabledForegroundColor: Colors.grey[500],
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(8),
-                            bottomLeft: Radius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                Expanded(
-                  flex: 2,
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _importLocalBackupDirectlyFromFolder();
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey[100],
-                        foregroundColor: Colors.blueGrey[900],
-                        elevation: 1,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(
-                            topRight: Radius.circular(8),
-                            bottomRight: Radius.circular(8),
-                          ),
-                        ),
-                      ),
-                      child: const Icon(Icons.file_open, size: 20),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
-
   void _showAppSettingsMenu() {
     String tempShopName = globalShopName;
     String tempTheme = currentThemeSetting;
