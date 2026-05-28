@@ -8,6 +8,11 @@ import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 void main() async {
   // Ensures all Flutter components are completely bound and ready before modifying platform UI settings
@@ -16,11 +21,26 @@ void main() async {
   // Immersive Sticky mode hides both the top status bar and bottom navigation bar completely
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-  runApp(const SmartBillingApp());
+  // Initialize Firebase
+  await Firebase.initializeApp();
+
+  runApp(SmartBillingApp(key: smartBillingAppKey));
 }
 
-class SmartBillingApp extends StatelessWidget {
-  const SmartBillingApp({super.key});
+// Global key to allow rebuilding the root app widget when theme changes
+final GlobalKey<_SmartBillingAppState> smartBillingAppKey = GlobalKey<_SmartBillingAppState>();
+
+class SmartBillingApp extends StatefulWidget {
+  SmartBillingApp({super.key});
+  @override
+  State<SmartBillingApp> createState() => _SmartBillingAppState();
+}
+
+class _SmartBillingAppState extends State<SmartBillingApp> {
+  void rebuildApp() {
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -28,7 +48,7 @@ class SmartBillingApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blueGrey,
-          brightness: Brightness.dark,
+          brightness: currentThemeSetting == "LIGHT" ? Brightness.light : Brightness.dark,
         ),
         useMaterial3: true,
       ),
@@ -41,6 +61,8 @@ class SmartBillingApp extends StatelessWidget {
 Map<String, List<Map<String, String>>> globalInventory = {};
 String currentLayoutSetting = "SBL";
 String globalShopName = "RETAIL INVOICE";
+String currentThemeSetting = "DARK";
+User? currentFirebaseUser;
 
 // --- LOCAL STORAGE HELPER LOGIC ---
 class LocalDatabase {
@@ -125,6 +147,122 @@ class LocalDatabase {
       debugPrint("Error loading layout profile configuration: $e");
     }
   }
+
+  static Future<void> saveThemeSetting() async {
+    try {
+      if (await Permission.manageExternalStorage.isGranted ||
+          await Permission.storage.isGranted) {
+        final basePath = await _getExternalDownloadsFolderPath();
+        final file = File("$basePath/theme_settings.json");
+        await file.writeAsString(
+          jsonEncode({"theme": currentThemeSetting}),
+        );
+      }
+    } catch (e) {
+      debugPrint("Error saving theme configuration: $e");
+    }
+  }
+
+  static Future<void> loadThemeSetting() async {
+    try {
+      final downloadDir = Directory(
+        '/storage/emulated/0/Download/BILLING APP/INTERNAL_SETTINGS',
+      );
+      final file = File("${downloadDir.path}/theme_settings.json");
+      if (await file.exists()) {
+        Map<String, dynamic> decoded = jsonDecode(await file.readAsString());
+        currentThemeSetting = decoded["theme"] ?? "DARK";
+      }
+    } catch (e) {
+      debugPrint("Error loading theme configuration: $e");
+    }
+  }
+}
+
+// --- CLOUD DATABASE HELPER (PER-USER FIRESTORE SYNC) ---
+class CloudDatabase {
+  static FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+
+  // Sync inventory data to Firestore under the current user's UID
+  static Future<void> syncInventoryToCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      // Convert the inventory map to a JSON-safe format for Firestore
+      Map<String, dynamic> inventoryData = {};
+      globalInventory.forEach((key, value) {
+        inventoryData[key] = value.map((item) => Map<String, String>.from(item)).toList();
+      });
+      await _firestore.collection('users').doc(uid).collection('data').doc('inventory').set({
+        'inventory': inventoryData,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Error syncing inventory to cloud: $e");
+    }
+  }
+
+  // Load inventory data from Firestore for the current user
+  static Future<void> loadInventoryFromCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      final doc = await _firestore.collection('users').doc(uid).collection('data').doc('inventory').get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data['inventory'] != null) {
+          Map<String, dynamic> decoded = Map<String, dynamic>.from(data['inventory']);
+          Map<String, List<Map<String, String>>> loadedInventory = {};
+          decoded.forEach((key, value) {
+            loadedInventory[key] = (value as List)
+                .map((item) => Map<String, String>.from(item))
+                .toList();
+          });
+          globalInventory = loadedInventory;
+          // Also save to local disk so offline works
+          await LocalDatabase.saveToDisk();
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading inventory from cloud: $e");
+    }
+  }
+
+  // Sync all settings to Firestore under the current user's UID
+  static Future<void> syncSettingsToCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      await _firestore.collection('users').doc(uid).collection('data').doc('settings').set({
+        'layout': currentLayoutSetting,
+        'shopName': globalShopName,
+        'theme': currentThemeSetting,
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint("Error syncing settings to cloud: $e");
+    }
+  }
+
+  // Load all settings from Firestore for the current user
+  static Future<void> loadSettingsFromCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      final doc = await _firestore.collection('users').doc(uid).collection('data').doc('settings').get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        currentLayoutSetting = data['layout'] ?? "SBL";
+        globalShopName = data['shopName'] ?? "RETAIL INVOICE";
+        currentThemeSetting = data['theme'] ?? "DARK";
+        // Also save to local disk
+        await LocalDatabase.saveLayoutSetting();
+        await LocalDatabase.saveThemeSetting();
+      }
+    } catch (e) {
+      debugPrint("Error loading settings from cloud: $e");
+    }
+  }
 }
 
 class DashboardScreen extends StatefulWidget {
@@ -205,6 +343,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     await LocalDatabase.loadFromDisk();
     await LocalDatabase.loadLayoutSetting();
+    await LocalDatabase.loadThemeSetting();
+
+    // Check if user was previously signed in
+    currentFirebaseUser = FirebaseAuth.instance.currentUser;
+
+    smartBillingAppKey.currentState?.rebuildApp();
     setState(() {
       _isLoadingDb = false;
     });
@@ -1557,6 +1701,96 @@ class SetupScreen extends StatefulWidget {
 }
 
 class _SetupScreenState extends State<SetupScreen> {
+  bool _isSigningIn = false;
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isSigningIn = true);
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        setState(() => _isSigningIn = false);
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+
+      setState(() {
+        currentFirebaseUser = userCredential.user;
+        _isSigningIn = false;
+      });
+
+      // Load user's cloud data (inventory + settings)
+      await CloudDatabase.loadInventoryFromCloud();
+      await CloudDatabase.loadSettingsFromCloud();
+      smartBillingAppKey.currentState?.rebuildApp();
+      setState(() {});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Signed in as ${currentFirebaseUser?.email ?? 'Unknown'}",
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSigningIn = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Sign-in failed: $e"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      debugPrint("Google Sign-In error: $e");
+    }
+  }
+
+  Future<void> _handleSignOut() async {
+    try {
+      await GoogleSignIn().signOut();
+      await FirebaseAuth.instance.signOut();
+      setState(() {
+        currentFirebaseUser = null;
+      });
+
+      // Reload local data after sign-out
+      await LocalDatabase.loadFromDisk();
+      await LocalDatabase.loadLayoutSetting();
+      await LocalDatabase.loadThemeSetting();
+      smartBillingAppKey.currentState?.rebuildApp();
+      setState(() {});
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Signed out successfully"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Sign-out error: $e")),
+        );
+      }
+    }
+  }
+
   // Internal logic to run an inventory save and return the written File handle
   Future<File?> _executeSilentInventoryExport() async {
     try {
@@ -1674,7 +1908,19 @@ class _SetupScreenState extends State<SetupScreen> {
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed: null, // DISABLED placeholder for cloud sync
+                      onPressed: () async {
+                        if (currentFirebaseUser == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please sign in first!")));
+                          return;
+                        }
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Exporting to cloud...")));
+                        await CloudDatabase.syncInventoryToCloud();
+                        await CloudDatabase.syncSettingsToCloud();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Export complete!"), backgroundColor: Colors.green));
+                        }
+                      },
                       icon: const Icon(Icons.cloud_upload_outlined),
                       label: const Text(
                         "EXPORT TO CLOUD",
@@ -1734,7 +1980,21 @@ class _SetupScreenState extends State<SetupScreen> {
                   child: SizedBox(
                     height: 50,
                     child: ElevatedButton.icon(
-                      onPressed: null, // DISABLED placeholder for cloud sync
+                      onPressed: () async {
+                        if (currentFirebaseUser == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please sign in first!")));
+                          return;
+                        }
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Importing from cloud...")));
+                        await CloudDatabase.loadInventoryFromCloud();
+                        await CloudDatabase.loadSettingsFromCloud();
+                        smartBillingAppKey.currentState?.rebuildApp();
+                        setState(() {});
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Import complete!"), backgroundColor: Colors.green));
+                        }
+                      },
                       icon: const Icon(Icons.cloud_download_outlined),
                       label: const Text(
                         "IMPORT FROM CLOUD",
@@ -1786,6 +2046,103 @@ class _SetupScreenState extends State<SetupScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+  void _showThemeSettingsMenu() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setPopupState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          title: const Center(
+            child: Text(
+              "THEME OPTIONS",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.blueGrey,
+              ),
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Theme(
+                data: Theme.of(context).copyWith(
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: Icon(
+                        Icons.light_mode,
+                        color: currentThemeSetting == "LIGHT"
+                            ? Colors.amber
+                            : Colors.blueGrey,
+                      ),
+                      title: Text(
+                        "LIGHT THEME",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: currentThemeSetting == "LIGHT"
+                              ? Colors.amber
+                              : (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white70
+                                  : Colors.black87),
+                        ),
+                      ),
+                      trailing: currentThemeSetting == "LIGHT"
+                          ? const Icon(Icons.check_circle, color: Colors.amber)
+                          : null,
+                      onTap: () async {
+                        setPopupState(() => currentThemeSetting = "LIGHT");
+                        await LocalDatabase.saveThemeSetting();
+                        smartBillingAppKey.currentState?.rebuildApp();
+                        setState(() {});
+                        if (mounted) Navigator.pop(context);
+                      },
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: Icon(
+                        Icons.dark_mode,
+                        color: currentThemeSetting == "DARK"
+                            ? Colors.indigo
+                            : Colors.blueGrey,
+                      ),
+                      title: Text(
+                        "DARK THEME",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: currentThemeSetting == "DARK"
+                              ? Colors.indigo
+                              : (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white70
+                                  : Colors.black87),
+                        ),
+                      ),
+                      trailing: currentThemeSetting == "DARK"
+                          ? const Icon(Icons.check_circle, color: Colors.indigo)
+                          : null,
+                      onTap: () async {
+                        setPopupState(() => currentThemeSetting = "DARK");
+                        await LocalDatabase.saveThemeSetting();
+                        smartBillingAppKey.currentState?.rebuildApp();
+                        setState(() {});
+                        if (mounted) Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2073,6 +2430,69 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
             const SizedBox(height: 15),
             InkWell(
+              onTap: _isSigningIn ? null : (currentFirebaseUser == null ? _handleGoogleSignIn : _handleSignOut),
+              child: Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: currentFirebaseUser == null
+                      ? (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50])
+                      : Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: currentFirebaseUser == null
+                        ? (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200)
+                        : Colors.green,
+                  ),
+                ),
+                child: Center(
+                  child: _isSigningIn
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (currentFirebaseUser == null)
+                                  const Icon(Icons.login, size: 20)
+                                else
+                                  const Icon(Icons.check_circle, size: 20, color: Colors.green),
+                                const SizedBox(width: 8),
+                                Text(
+                                  currentFirebaseUser == null
+                                      ? "SIGN-IN WITH GOOGLE"
+                                      : "SIGNED IN",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: currentFirebaseUser == null
+                                        ? null
+                                        : Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (currentFirebaseUser != null)
+                              Text(
+                                "${currentFirebaseUser!.email?.toLowerCase() ?? 'user'} (TAP TO LOGOUT)",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                  color: Colors.green,
+                                ),
+                              ),
+                          ],
+                        ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            InkWell(
               onTap: _showCenterBackupMenu,
               child: Container(
                 width: double.infinity,
@@ -2087,6 +2507,27 @@ class _SetupScreenState extends State<SetupScreen> {
                 child: const Center(
                   child: Text(
                     "INVENTORY BACKUP",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            InkWell(
+              onTap: _showThemeSettingsMenu,
+              child: Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    "THEME SETTINGS",
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -2111,29 +2552,8 @@ class _SetupScreenState extends State<SetupScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 15),
-            // --- CLOUD CONFIGURATION LINK PLACEHOLDER ---
-            Container(
-              width: double.infinity,
-              height: 60,
-              decoration: BoxDecoration(
-                color: isDark ? Colors.blueGrey[900] : Colors.grey[200],
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: isDark ? Colors.blueGrey[800]! : Colors.grey.shade300,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  "CLOUD CONFIGURATION",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.blueGrey[600] : Colors.grey[500],
-                  ),
-                ),
-              ),
-            ),
             const Spacer(),
+            // Placeholder removed
             const Center(
               child: Text(
                 "COMPLETELY DESIGNED AND MADE BY SOHAM INDURKAR",
