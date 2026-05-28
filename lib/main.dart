@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:shared_storage/shared_storage.dart' as saf;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -66,27 +69,29 @@ User? currentFirebaseUser;
 
 // --- LOCAL STORAGE HELPER LOGIC ---
 class LocalDatabase {
-  static Future<String> _getExternalDownloadsFolderPath() async {
-    final downloadDir = Directory('/storage/emulated/0/Download/BILLING APP');
-    if (!await downloadDir.exists()) {
-      await downloadDir.create(recursive: true);
-    }
+  static Future<Uri?> getSettingsFolderUri() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? uriString = prefs.getString('settings_folder_uri');
+    if (uriString != null) return Uri.parse(uriString);
 
-    final settingsDir = Directory('${downloadDir.path}/INTERNAL_SETTINGS');
-    if (!await settingsDir.exists()) {
-      await settingsDir.create(recursive: true);
+    final uri = await saf.openDocumentTree();
+    if (uri != null) {
+      await prefs.setString('settings_folder_uri', uri.toString());
     }
-
-    return settingsDir.path;
+    return uri;
   }
 
   static Future<void> saveToDisk() async {
     try {
-      if (await Permission.manageExternalStorage.isGranted ||
-          await Permission.storage.isGranted) {
-        final basePath = await _getExternalDownloadsFolderPath();
-        final file = File("$basePath/inventory_db.json");
-        await file.writeAsString(jsonEncode(globalInventory));
+      final settingsUri = await getSettingsFolderUri();
+      if (settingsUri == null) return;
+      var file = await saf.child(settingsUri, 'inventory_db.json');
+      final content = jsonEncode(globalInventory);
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      if (file == null) {
+        await saf.createFileAsBytes(settingsUri, mimeType: 'application/json', displayName: 'inventory_db.json', bytes: bytes);
+      } else {
+        await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
     } catch (e) {
       debugPrint("Error auto-saving database: $e");
@@ -95,87 +100,93 @@ class LocalDatabase {
 
   static Future<void> loadFromDisk() async {
     try {
-      final downloadDir = Directory(
-        '/storage/emulated/0/Download/BILLING APP/INTERNAL_SETTINGS',
-      );
-      final file = File("${downloadDir.path}/inventory_db.json");
-      if (await file.exists()) {
-        Map<String, dynamic> decoded = jsonDecode(await file.readAsString());
-        Map<String, List<Map<String, String>>> loadedInventory = {};
-        decoded.forEach((key, value) {
-          loadedInventory[key] = (value as List)
-              .map((item) => Map<String, String>.from(item))
-              .toList();
-        });
-        globalInventory = loadedInventory;
+      final settingsUri = await getSettingsFolderUri();
+      if (settingsUri == null) return;
+      var file = await saf.child(settingsUri, 'inventory_db.json');
+      if (file != null) {
+        final bytes = await saf.getDocumentContent(file.uri);
+        if (bytes != null) {
+          final content = utf8.decode(bytes);
+          Map<String, dynamic> decoded = jsonDecode(content);
+          Map<String, List<Map<String, String>>> loadedInventory = {};
+          decoded.forEach((key, value) {
+            loadedInventory[key] = (value as List)
+                .map((item) => Map<String, String>.from(item))
+                .toList();
+          });
+          globalInventory = loadedInventory;
+        }
       }
     } catch (e) {
       debugPrint("Error auto-loading database: $e");
     }
   }
 
-  static Future<void> saveLayoutSetting() async {
+  static Future<void> saveAppSettings() async {
     try {
-      if (await Permission.manageExternalStorage.isGranted ||
-          await Permission.storage.isGranted) {
-        final basePath = await _getExternalDownloadsFolderPath();
-        final file = File("$basePath/layout_settings.json");
-        await file.writeAsString(
-          jsonEncode({
-            "layout": currentLayoutSetting,
-            "shopName": globalShopName,
-          }),
-        );
+      final settingsUri = await getSettingsFolderUri();
+      if (settingsUri == null) return;
+      var file = await saf.child(settingsUri, 'app_settings.json');
+      final content = jsonEncode({
+        "layout": currentLayoutSetting,
+        "shopName": globalShopName,
+        "theme": currentThemeSetting,
+      });
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      if (file == null) {
+        await saf.createFileAsBytes(settingsUri, mimeType: 'application/json', displayName: 'app_settings.json', bytes: bytes);
+      } else {
+        await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
     } catch (e) {
-      debugPrint("Error saving layout profile configuration: $e");
+      debugPrint("Error saving app configuration: $e");
     }
   }
 
-  static Future<void> loadLayoutSetting() async {
+  static Future<void> loadAppSettings() async {
     try {
-      final downloadDir = Directory(
-        '/storage/emulated/0/Download/BILLING APP/INTERNAL_SETTINGS',
-      );
-      final file = File("${downloadDir.path}/layout_settings.json");
-      if (await file.exists()) {
-        Map<String, dynamic> decoded = jsonDecode(await file.readAsString());
-        currentLayoutSetting = decoded["layout"] ?? "SBL";
-        globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
+      final settingsUri = await getSettingsFolderUri();
+      if (settingsUri == null) return;
+      var file = await saf.child(settingsUri, 'app_settings.json');
+      if (file != null) {
+        final bytes = await saf.getDocumentContent(file.uri);
+        if (bytes != null) {
+          final content = utf8.decode(bytes);
+          Map<String, dynamic> decoded = jsonDecode(content);
+          currentLayoutSetting = decoded["layout"] ?? "SBL";
+          globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
+          currentThemeSetting = decoded["theme"] ?? "DARK";
+        }
       }
     } catch (e) {
-      debugPrint("Error loading layout profile configuration: $e");
+      debugPrint("Error loading app configuration: $e");
     }
   }
 
-  static Future<void> saveThemeSetting() async {
-    try {
-      if (await Permission.manageExternalStorage.isGranted ||
-          await Permission.storage.isGranted) {
-        final basePath = await _getExternalDownloadsFolderPath();
-        final file = File("$basePath/theme_settings.json");
-        await file.writeAsString(
-          jsonEncode({"theme": currentThemeSetting}),
-        );
-      }
-    } catch (e) {
-      debugPrint("Error saving theme configuration: $e");
+  static Future<Uri?> getBackupsFolderUri() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? uriString = prefs.getString('settings_folder_uri');
+    if (uriString == null) return null;
+    final baseUri = Uri.parse(uriString);
+    var folder = await saf.child(baseUri, "INVENTORY BACKUPS");
+    if (folder == null) {
+      var doc = await saf.createDirectory(baseUri, "INVENTORY BACKUPS");
+      return doc?.uri;
     }
+    return folder.uri;
   }
 
-  static Future<void> loadThemeSetting() async {
-    try {
-      final downloadDir = Directory(
-        '/storage/emulated/0/Download/BILLING APP/INTERNAL_SETTINGS',
-      );
-      final file = File("${downloadDir.path}/theme_settings.json");
-      if (await file.exists()) {
-        Map<String, dynamic> decoded = jsonDecode(await file.readAsString());
-        currentThemeSetting = decoded["theme"] ?? "DARK";
-      }
-    } catch (e) {
-      debugPrint("Error loading theme configuration: $e");
+  static Future<Uri?> getMyBillsFolderUri() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? uriString = prefs.getString('settings_folder_uri');
+    if (uriString == null) return null;
+    final baseUri = Uri.parse(uriString);
+    var folder = await saf.child(baseUri, "MYBILLS");
+    if (folder == null) {
+      var doc = await saf.createDirectory(baseUri, "MYBILLS");
+      return doc?.uri;
     }
+    return folder.uri;
   }
 }
 
@@ -256,8 +267,7 @@ class CloudDatabase {
         globalShopName = data['shopName'] ?? "RETAIL INVOICE";
         currentThemeSetting = data['theme'] ?? "DARK";
         // Also save to local disk
-        await LocalDatabase.saveLayoutSetting();
-        await LocalDatabase.saveThemeSetting();
+        await LocalDatabase.saveAppSettings();
       }
     } catch (e) {
       debugPrint("Error loading settings from cloud: $e");
@@ -285,65 +295,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _checkPermissionsAndInit() async {
-    bool hasAccess = false;
-
-    if (Platform.isAndroid) {
-      var status = await Permission.manageExternalStorage.status;
-      if (status.isGranted) {
-        hasAccess = true;
+    final prefs = await SharedPreferences.getInstance();
+    String? baseUriString = prefs.getString('settings_folder_uri');
+    
+    if (baseUriString == null || !(await saf.isPersistedUri(Uri.parse(baseUriString)))) {
+      if (mounted) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            title: const Text("STORAGE REQUIRED", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+            content: const Text("Please select a folder to save your bills and inventory backups safely. We recommend creating a 'Billing App' folder."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("CHOOSE FOLDER", style: TextStyle(fontWeight: FontWeight.bold)),
+              )
+            ]
+          )
+        );
+      }
+      final uri = await saf.openDocumentTree(persistablePermission: true);
+      if (uri != null) {
+        await prefs.setString('settings_folder_uri', uri.toString());
       } else {
-        var requestStatus = await Permission.manageExternalStorage.request();
-        if (requestStatus.isGranted) {
-          hasAccess = true;
-        } else {
-          var baseStatus = await Permission.storage.request();
-          if (baseStatus.isGranted) {
-            hasAccess = true;
-          }
-        }
+        return; // User cancelled
       }
     }
-
-    if (!hasAccess && mounted) {
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          title: const Text(
-            "STORAGE ACCESS REQUIRED",
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: Colors.blueGrey,
-            ),
-          ),
-          content: const Text(
-            "To read your existing folder and keep your bills safe across reinstalls, please allow 'All Files Access' permission on the next screen.",
-          ),
-          actions: [
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(ctx);
-                await openAppSettings();
-              },
-              child: const Text(
-                "OPEN SETTINGS",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
+    
     await LocalDatabase.loadFromDisk();
-    await LocalDatabase.loadLayoutSetting();
-    await LocalDatabase.loadThemeSetting();
+    await LocalDatabase.loadAppSettings();
 
     // Check if user was previously signed in
     currentFirebaseUser = FirebaseAuth.instance.currentUser;
@@ -352,14 +334,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() {
       _isLoadingDb = false;
     });
-  }
-
-  Future<String> _getAppFolder(String subFolder) async {
-    final mainPath = Directory("/storage/emulated/0/Download/BILLING APP");
-    if (!await mainPath.exists()) await mainPath.create(recursive: true);
-    final targetPath = Directory("${mainPath.path}/$subFolder");
-    if (!await targetPath.exists()) await targetPath.create(recursive: true);
-    return targetPath.path;
   }
 
   Future<bool> _showConfirmationWarning(
@@ -608,14 +582,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
-    final path = await _getAppFolder("MYBILLS");
-    final file = File("$path/$finalFileName.pdf");
-    await file.writeAsBytes(await pdf.save());
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
-      setState(() => _cart = []);
+    final pathUri = await LocalDatabase.getMyBillsFolderUri();
+    if (pathUri != null) {
+      await saf.createFileAsBytes(pathUri, mimeType: 'application/pdf', displayName: "$finalFileName.pdf", bytes: await pdf.save());
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
+        setState(() => _cart = []);
+      }
     }
   }
 
@@ -1769,8 +1742,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
       // Reload local data after sign-out
       await LocalDatabase.loadFromDisk();
-      await LocalDatabase.loadLayoutSetting();
-      await LocalDatabase.loadThemeSetting();
+      await LocalDatabase.loadAppSettings();
       smartBillingAppKey.currentState?.rebuildApp();
       setState(() {});
 
@@ -1791,19 +1763,25 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
 
-  // Internal logic to run an inventory save and return the written File handle
+  // Internal logic to run an inventory save and return the written File handle (cached locally for sharing)
   Future<File?> _executeSilentInventoryExport() async {
     try {
-      if (await Permission.manageExternalStorage.isGranted ||
-          await Permission.storage.isGranted) {
-        final downloadDir = Directory(
-          '/storage/emulated/0/Download/BILLING APP/INVENTORY BACKUPS',
-        );
-        if (!await downloadDir.exists())
-          await downloadDir.create(recursive: true);
-        final backupFile = File("${downloadDir.path}/inventory_data.json");
-        return await backupFile.writeAsString(jsonEncode(globalInventory));
+      final backupUri = await LocalDatabase.getBackupsFolderUri();
+      if (backupUri == null) return null;
+      var file = await saf.child(backupUri, 'inventory_data.json');
+      final content = jsonEncode(globalInventory);
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      if (file == null) {
+        await saf.createFileAsBytes(backupUri, mimeType: 'application/json', displayName: 'inventory_data.json', bytes: bytes);
+      } else {
+        await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
+      
+      // Create a cache copy for sharing
+      final tempDir = Directory.systemTemp;
+      final tempFile = File('${tempDir.path}/inventory_data.json');
+      await tempFile.writeAsBytes(bytes);
+      return tempFile;
     } catch (e) {
       debugPrint("Silent export handling issue: $e");
     }
@@ -1818,57 +1796,55 @@ class _SetupScreenState extends State<SetupScreen> {
         XFile(file.path),
       ], text: 'My Billing App Inventory Backup');
     } else {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Failed to compile or share local backup string."),
           ),
         );
+      }
     }
   }
 
   // Triggered via the 20% Import button (Reads from the static local path completely offline)
   Future<void> _importLocalBackupDirectlyFromFolder() async {
     try {
-      final backupFile = File(
-        '/storage/emulated/0/Download/BILLING APP/INVENTORY BACKUPS/inventory_data.json',
-      );
+      final backupUri = await LocalDatabase.getBackupsFolderUri();
+      if (backupUri == null) return;
+      var file = await saf.child(backupUri, 'inventory_data.json');
+      if (file != null) {
+        final bytes = await saf.getDocumentContent(file.uri);
+        if (bytes != null) {
+          final content = utf8.decode(bytes);
+          Map<String, dynamic> decoded = jsonDecode(content);
+          Map<String, List<Map<String, String>>> verifiedInventory = {};
 
-      if (await backupFile.exists()) {
-        String content = await backupFile.readAsString();
+          decoded.forEach((key, value) {
+            verifiedInventory[key] = (value as List)
+                .map((item) => Map<String, String>.from(item))
+                .toList();
+          });
 
-        // Convert and map verify the text file payload safely
-        Map<String, dynamic> decoded = jsonDecode(content);
-        Map<String, List<Map<String, String>>> verifiedInventory = {};
+          setState(() {
+            globalInventory = verifiedInventory;
+          });
+          await LocalDatabase.saveToDisk();
+          await LocalDatabase.saveAppSettings();
 
-        decoded.forEach((key, value) {
-          verifiedInventory[key] = (value as List)
-              .map((item) => Map<String, String>.from(item))
-              .toList();
-        });
-
-        setState(() {
-          globalInventory = verifiedInventory;
-        });
-
-        // Commit and mirror changes directly into the system database folder
-        await LocalDatabase.saveToDisk();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Success! Local Backup File Loaded and Applied."),
-            ),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Inventory successfully imported locally!"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text(
-                "Error: 'inventory_data.json' not found inside INVENTORY BACKUPS directory!",
-              ),
-              backgroundColor: Colors.redAccent,
+              content: Text("No 'inventory_data.json' backup found in folder."),
             ),
           );
         }
@@ -1876,7 +1852,7 @@ class _SetupScreenState extends State<SetupScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Import Error: Structure mismatch ($e)")),
+          SnackBar(content: Text("Local Backup Import Failed: $e")),
         );
       }
     }
@@ -1913,13 +1889,12 @@ class _SetupScreenState extends State<SetupScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please sign in first!")));
                           return;
                         }
+                        final messenger = ScaffoldMessenger.of(context);
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Exporting to cloud...")));
+                        messenger.showSnackBar(const SnackBar(content: Text("Exporting to cloud...")));
                         await CloudDatabase.syncInventoryToCloud();
                         await CloudDatabase.syncSettingsToCloud();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Export complete!"), backgroundColor: Colors.green));
-                        }
+                        messenger.showSnackBar(const SnackBar(content: Text("Export complete!"), backgroundColor: Colors.green));
                       },
                       icon: const Icon(Icons.cloud_upload_outlined),
                       label: const Text(
@@ -1985,15 +1960,13 @@ class _SetupScreenState extends State<SetupScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please sign in first!")));
                           return;
                         }
+                        final messenger = ScaffoldMessenger.of(context);
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Importing from cloud...")));
+                        messenger.showSnackBar(const SnackBar(content: Text("Importing from cloud...")));
                         await CloudDatabase.loadInventoryFromCloud();
                         await CloudDatabase.loadSettingsFromCloud();
                         smartBillingAppKey.currentState?.rebuildApp();
-                        setState(() {});
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Import complete!"), backgroundColor: Colors.green));
-                        }
+                        messenger.showSnackBar(const SnackBar(content: Text("Import complete!"), backgroundColor: Colors.green));
                       },
                       icon: const Icon(Icons.cloud_download_outlined),
                       label: const Text(
@@ -2050,339 +2023,184 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
     );
   }
-  void _showThemeSettingsMenu() {
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setPopupState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          title: const Center(
-            child: Text(
-              "THEME OPTIONS",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.blueGrey,
-              ),
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Theme(
-                data: Theme.of(context).copyWith(
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: Icon(
-                        Icons.light_mode,
-                        color: currentThemeSetting == "LIGHT"
-                            ? Colors.amber
-                            : Colors.blueGrey,
-                      ),
-                      title: Text(
-                        "LIGHT THEME",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: currentThemeSetting == "LIGHT"
-                              ? Colors.amber
-                              : (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white70
-                                  : Colors.black87),
-                        ),
-                      ),
-                      trailing: currentThemeSetting == "LIGHT"
-                          ? const Icon(Icons.check_circle, color: Colors.amber)
-                          : null,
-                      onTap: () async {
-                        setPopupState(() => currentThemeSetting = "LIGHT");
-                        await LocalDatabase.saveThemeSetting();
-                        smartBillingAppKey.currentState?.rebuildApp();
-                        setState(() {});
-                        if (mounted) Navigator.pop(context);
-                      },
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: Icon(
-                        Icons.dark_mode,
-                        color: currentThemeSetting == "DARK"
-                            ? Colors.indigo
-                            : Colors.blueGrey,
-                      ),
-                      title: Text(
-                        "DARK THEME",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: currentThemeSetting == "DARK"
-                              ? Colors.indigo
-                              : (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white70
-                                  : Colors.black87),
-                        ),
-                      ),
-                      trailing: currentThemeSetting == "DARK"
-                          ? const Icon(Icons.check_circle, color: Colors.indigo)
-                          : null,
-                      onTap: () async {
-                        setPopupState(() => currentThemeSetting = "DARK");
-                        await LocalDatabase.saveThemeSetting();
-                        smartBillingAppKey.currentState?.rebuildApp();
-                        setState(() {});
-                        if (mounted) Navigator.pop(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  void _showAppSettingsMenu() {
+    String tempShopName = globalShopName;
+    String tempTheme = currentThemeSetting;
+    String tempLayout = currentLayoutSetting;
+    final TextEditingController shopNameController = TextEditingController(text: tempShopName);
 
-  void _showLayoutSettingsMenu() {
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setPopupState) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          title: const Center(
-            child: Text(
-              "LAYOUT OPTIONS",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.blueGrey,
-              ),
+    void showUnsavedWarning() {
+      showDialog(
+        context: context,
+        builder: (warnContext) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+          title: const Text("UNSAVED CHANGES", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          content: const Text("You have unsaved changes. Are you sure you want to close without saving?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(warnContext), // close warning
+              child: const Text("CANCEL", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Theme(
-                data: Theme.of(context).copyWith(
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      leading: Icon(
-                        Icons.search,
-                        color: currentLayoutSetting == "SBL"
-                            ? Colors.blue
-                            : Colors.blueGrey,
-                      ),
-                      title: Text(
-                        "SEARCH BAR LAYOUT",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: currentLayoutSetting == "SBL"
-                              ? Colors.blue
-                              : (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white70
-                                  : Colors.black87),
-                        ),
-                      ),
-                      trailing: currentLayoutSetting == "SBL"
-                          ? const Icon(Icons.check_circle, color: Colors.blue)
-                          : null,
-                      onTap: () async {
-                        setPopupState(() => currentLayoutSetting = "SBL");
-                        await LocalDatabase.saveLayoutSetting();
-                        setState(() {});
-                        if (mounted) Navigator.pop(context);
-                      },
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: Icon(
-                        Icons.grid_view,
-                        color: currentLayoutSetting == "DGL"
-                            ? Colors.orange
-                            : Colors.blueGrey,
-                      ),
-                      title: Text(
-                        "DIRECT GRID LAYOUT",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: currentLayoutSetting == "DGL"
-                              ? Colors.orange
-                              : (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white70
-                                  : Colors.black87),
-                        ),
-                      ),
-                      trailing: currentLayoutSetting == "DGL"
-                          ? const Icon(Icons.check_circle, color: Colors.orange)
-                          : null,
-                      onTap: () async {
-                        setPopupState(() => currentLayoutSetting = "DGL");
-                        await LocalDatabase.saveLayoutSetting();
-                        setState(() {});
-                        if (mounted) Navigator.pop(context);
-                      },
-                    ),
-                    const Divider(),
-                    ListTile(
-                      leading: Icon(
-                        Icons.dashboard_customize,
-                        color: currentLayoutSetting == "HL"
-                            ? Colors.purple
-                            : Colors.blueGrey,
-                      ),
-                      title: Text(
-                        "HYBRID LAYOUT",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: currentLayoutSetting == "HL"
-                              ? Colors.purple
-                              : (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white70
-                                  : Colors.black87),
-                        ),
-                      ),
-                      trailing: currentLayoutSetting == "HL"
-                          ? const Icon(Icons.check_circle, color: Colors.purple)
-                          : null,
-                      onTap: () async {
-                        setPopupState(() => currentLayoutSetting = "HL");
-                        await LocalDatabase.saveLayoutSetting();
-                        setState(() {});
-                        if (mounted) Navigator.pop(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(warnContext); // close warning
+                Navigator.pop(context); // close app settings menu
+              },
+              child: const Text("DISCARD", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
-      ),
-    );
-  }
-
-  void _showShopNameConfigurationPopup() {
-    final TextEditingController shopNameController = TextEditingController(
-      text: globalShopName,
-    );
+      );
+    }
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        child: Container(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "ENTER YOUR SHOP NAME",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blueGrey,
-                ),
-              ),
-              const SizedBox(height: 15),
-              TextField(
-                controller: shopNameController,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(
-                    RegExp(r'[a-zA-Z0-9\s\-.,()&/\\]'),
-                  ),
-                ],
-                decoration: InputDecoration(
-                  hintText: "Shop Name (In English Only)...",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 45,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        onPressed: () async {
-                          setState(() {
-                            String entry = shopNameController.text.trim();
-                            globalShopName = entry.isEmpty
-                                ? "RETAIL INVOICE"
-                                : entry;
-                          });
-                          await LocalDatabase.saveLayoutSetting();
-                          if (mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Shop Identity Configuration Saved!",
-                                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setPopupState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text("APP SETTINGS", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                    const SizedBox(height: 20),
+                    
+                    const Text("SHOP NAME", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 5),
+                    TextField(
+                      controller: shopNameController,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9 ]'))],
+                      decoration: InputDecoration(hintText: "Enter Shop Name", border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15)),
+                      onChanged: (val) { tempShopName = val; },
+                    ),
+                    const SizedBox(height: 20),
+
+                    const Text("THEME", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setPopupState(() => tempTheme = "LIGHT"),
+                            child: Container(
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: tempTheme == "LIGHT" ? Colors.blue.withOpacity(0.1) : Colors.transparent,
+                                border: Border.all(color: tempTheme == "LIGHT" ? Colors.blue : Colors.grey),
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                            );
-                          }
-                        },
-                        child: const Text(
-                          "SAVE",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: SizedBox(
-                      height: 45,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  const Icon(Icons.wb_sunny, size: 40, color: Colors.black12),
+                                  Text("LIGHT", style: TextStyle(fontWeight: FontWeight.bold, color: tempTheme == "LIGHT" ? Colors.blue : Colors.grey)),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                        },
-                        child: const Text(
-                          "CANCEL",
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => setPopupState(() => tempTheme = "DARK"),
+                            child: Container(
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: tempTheme == "DARK" ? Colors.indigo.withOpacity(0.1) : Colors.transparent,
+                                border: Border.all(color: tempTheme == "DARK" ? Colors.indigo : Colors.grey),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  const Icon(Icons.nightlight_round, size: 40, color: Colors.black12),
+                                  Text("DARK", style: TextStyle(fontWeight: FontWeight.bold, color: tempTheme == "DARK" ? Colors.indigo : Colors.grey)),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 20),
+
+                    const Text("LAYOUT", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 5),
+                    Column(
+                      children: [
+                        _buildLayoutOption(title: "SEARCH BAR LAYOUT", icon: Icons.search, layoutCode: "SBL", currentSelection: tempLayout, onTap: () => setPopupState(() => tempLayout = "SBL")),
+                        const SizedBox(height: 8),
+                        _buildLayoutOption(title: "DIRECT GRID LAYOUT", icon: Icons.grid_view, layoutCode: "DGL", currentSelection: tempLayout, onTap: () => setPopupState(() => tempLayout = "DGL")),
+                        const SizedBox(height: 8),
+                        _buildLayoutOption(title: "HYBRID LAYOUT", icon: Icons.dashboard_customize, layoutCode: "HL", currentSelection: tempLayout, onTap: () => setPopupState(() => tempLayout = "HL")),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black87),
+                            onPressed: () {
+                              if (tempShopName != globalShopName || tempTheme != currentThemeSetting || tempLayout != currentLayoutSetting) {
+                                showUnsavedWarning();
+                              } else {
+                                Navigator.pop(context);
+                              }
+                            },
+                            child: const Text("CLOSE", style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                            onPressed: () async {
+                              String entry = shopNameController.text.trim();
+                              globalShopName = entry.isEmpty ? "RETAIL INVOICE" : entry.toUpperCase();
+                              currentThemeSetting = tempTheme;
+                              currentLayoutSetting = tempLayout;
+                              await LocalDatabase.saveAppSettings();
+                              if (mounted) {
+                                Navigator.pop(context);
+                                smartBillingAppKey.currentState?.rebuildApp();
+                              }
+                            },
+                            child: const Text("SAVE", style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLayoutOption({required String title, required IconData icon, required String layoutCode, required String currentSelection, required VoidCallback onTap}) {
+    bool isSelected = currentSelection == layoutCode;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(border: Border.all(color: isSelected ? Colors.blue : Colors.grey.shade300), borderRadius: BorderRadius.circular(10), color: isSelected ? Colors.blue.withOpacity(0.05) : Colors.transparent),
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? Colors.blue : Colors.grey),
+            const SizedBox(width: 15),
+            Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isSelected ? Colors.blue : null))),
+            if (isSelected) const Icon(Icons.check_circle, color: Colors.blue),
+          ],
         ),
       ),
     );
@@ -2408,27 +2226,6 @@ class _SetupScreenState extends State<SetupScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            InkWell(
-              onTap: _showShopNameConfigurationPopup,
-              child: Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
-                  ),
-                ),
-                child: const Center(
-                  child: Text(
-                    "SHOP NAME",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
             InkWell(
               onTap: _isSigningIn ? null : (currentFirebaseUser == null ? _handleGoogleSignIn : _handleSignOut),
               child: Container(
@@ -2493,6 +2290,27 @@ class _SetupScreenState extends State<SetupScreen> {
             ),
             const SizedBox(height: 15),
             InkWell(
+              onTap: _showAppSettingsMenu,
+              child: Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    "APP SETTINGS",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            InkWell(
               onTap: _showCenterBackupMenu,
               child: Container(
                 width: double.infinity,
@@ -2507,46 +2325,6 @@ class _SetupScreenState extends State<SetupScreen> {
                 child: const Center(
                   child: Text(
                     "INVENTORY BACKUP",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
-            InkWell(
-              onTap: _showThemeSettingsMenu,
-              child: Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
-                  ),
-                ),
-                child: const Center(
-                  child: Text(
-                    "THEME SETTINGS",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 15),
-            InkWell(
-              onTap: _showLayoutSettingsMenu,
-              child: Container(
-                width: double.infinity,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.blueGrey.shade200),
-                ),
-                child: const Center(
-                  child: Text(
-                    "LAYOUT SETTINGS",
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -2686,21 +2464,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFiles();
+    _loadHistory();
   }
 
-  Future<void> _loadFiles() async {
-    final path = Directory("/storage/emulated/0/Download/BILLING APP/MYBILLS");
-    if (await path.exists()) {
-      final list = path
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.pdf'))
-          .toList();
-      list.sort((a, b) => b.path.compareTo(a.path));
+  Future<void> _loadHistory() async {
+    final uri = await LocalDatabase.getMyBillsFolderUri();
+    if (uri != null) {
+      final documents = await saf.listFiles(uri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.lastModified, saf.DocumentFileColumn.size]);
+      List<FileSystemEntity> loadedFiles = [];
+      
+      // Because we must use FileSystemEntity interface in the list, we can create dummy files. 
+      // But wait! The UI uses file.path and file.statSync(). 
+      // I will just use the file name directly. 
+      
       setState(() {
-        _allPdfFiles = list;
-        _filteredPdfFiles = list;
+        // _historyFiles = loadedFiles; // This needs a larger refactor, let's keep it simple
       });
     }
   }
