@@ -26,7 +26,10 @@ class SmartBillingApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blueGrey,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
       home: const DashboardScreen(),
@@ -241,10 +244,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text(
                       titleText,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.blueGrey[100]
+                            : Colors.blueGrey,
                         letterSpacing: 0.3,
                       ),
                     ),
@@ -487,13 +492,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     "PLS ENTER THE NAME OF CUSTOMER",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey,
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.blueGrey[100]
+                          : Colors.blueGrey,
                     ),
                   ),
                   const SizedBox(height: 15),
@@ -532,19 +539,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
+                          Text(
                             "SHOW RATE",
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
-                              color: Colors.blueGrey,
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.blueGrey[200]
+                                  : Colors.blueGrey,
                               letterSpacing: 0.5,
                             ),
                           ),
                           const SizedBox(width: 4),
                           Checkbox(
                             value: globalShowRateSetting,
-                            activeColor: Colors.blueGrey[800],
+                            activeColor: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blueGrey[400]
+                                : Colors.blueGrey[800],
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                             onChanged: (val) => setPopupState(
@@ -783,13 +794,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: editingQty
-                                  ? Colors.blue[50]
-                                  : Colors.grey[100],
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? (editingQty
+                                      ? Colors.blue[900]!.withOpacity(0.3)
+                                      : Colors.blueGrey[900])
+                                  : (editingQty
+                                      ? Colors.blue[50]
+                                      : Colors.grey[100]),
                               border: Border.all(
                                 color: editingQty
                                     ? Colors.blue
-                                    : Colors.grey.shade300,
+                                    : (Theme.of(context).brightness == Brightness.dark
+                                        ? Colors.blueGrey[700]!
+                                        : Colors.grey.shade300),
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -817,13 +834,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: !editingQty
-                                  ? Colors.blue[50]
-                                  : Colors.grey[100],
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? (!editingQty
+                                      ? Colors.blue[900]!.withOpacity(0.3)
+                                      : Colors.blueGrey[900])
+                                  : (!editingQty
+                                      ? Colors.blue[50]
+                                      : Colors.grey[100]),
                               border: Border.all(
                                 color: !editingQty
                                     ? Colors.blue
-                                    : Colors.grey.shade300,
+                                    : (Theme.of(context).brightness == Brightness.dark
+                                        ? Colors.blueGrey[700]!
+                                        : Colors.grey.shade300),
                               ),
                               borderRadius: BorderRadius.circular(10),
                             ),
@@ -1069,7 +1092,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           child: Container(
                                             padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
-                                              color: Colors.blueGrey[50],
+                                              color: Theme.of(context).brightness == Brightness.dark
+                                                  ? Colors.blueGrey[800]
+                                                  : Colors.blueGrey[50],
                                               borderRadius:
                                                   BorderRadius.circular(8),
                                             ),
@@ -1090,7 +1115,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 Text(
                                                   "${cartItem['qty']} ${cartItem['unit']} x ₹${cartItem['rate']}",
                                                   style: TextStyle(
-                                                    color: Colors.grey[700],
+                                                    color: Theme.of(context).brightness == Brightness.dark
+                                                        ? Colors.grey[300]
+                                                        : Colors.grey[700],
                                                     fontSize: 13,
                                                   ),
                                                 ),
@@ -1104,7 +1131,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         flex: 2,
                                         child: ElevatedButton(
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.red[100],
+                                            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                                ? Colors.red[900]!.withOpacity(0.4)
+                                                : Colors.red[100],
                                             padding: EdgeInsets.zero,
                                             elevation: 0,
                                             shape: RoundedRectangleBorder(
@@ -1150,7 +1179,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ? null
                                 : () => _showCustomerNamePopup(),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueGrey[900],
+                                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                      ? Colors.blueGrey[700]
+                                      : Colors.blueGrey[900],
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
@@ -1286,10 +1317,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           childAspectRatio: 1.3,
         ),
         itemBuilder: (context, index) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
           return ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueGrey[50],
-              foregroundColor: Colors.blueGrey[900],
+              backgroundColor: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+              foregroundColor: isDark ? Colors.white : Colors.blueGrey[900],
               elevation: 1,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -1358,10 +1390,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       String displayString = regName.isNotEmpty
                           ? "$baseName ($regName)"
                           : baseName;
+                      final isDark = Theme.of(context).brightness == Brightness.dark;
                       return ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange[50],
-                          foregroundColor: Colors.blueGrey[900],
+                          backgroundColor: isDark
+                              ? Colors.orange[900]!.withOpacity(0.3)
+                              : Colors.orange[50],
+                          foregroundColor: isDark ? Colors.orange[100] : Colors.blueGrey[900],
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
@@ -1385,7 +1420,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                               "₹${item['rate']}",
                               style: TextStyle(
-                                color: Colors.blueGrey[600],
+                                color: isDark ? Colors.orange[200] : Colors.blueGrey[600],
                                 fontSize: 11,
                               ),
                             ),
@@ -1798,7 +1833,9 @@ class _SetupScreenState extends State<SetupScreen> {
                           fontWeight: FontWeight.bold,
                           color: currentLayoutSetting == "SBL"
                               ? Colors.blue
-                              : Colors.black87,
+                              : (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white70
+                                  : Colors.black87),
                         ),
                       ),
                       trailing: currentLayoutSetting == "SBL"
@@ -1825,7 +1862,9 @@ class _SetupScreenState extends State<SetupScreen> {
                           fontWeight: FontWeight.bold,
                           color: currentLayoutSetting == "DGL"
                               ? Colors.orange
-                              : Colors.black87,
+                              : (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white70
+                                  : Colors.black87),
                         ),
                       ),
                       trailing: currentLayoutSetting == "DGL"
@@ -1852,7 +1891,9 @@ class _SetupScreenState extends State<SetupScreen> {
                           fontWeight: FontWeight.bold,
                           color: currentLayoutSetting == "HL"
                               ? Colors.purple
-                              : Colors.black87,
+                              : (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white70
+                                  : Colors.black87),
                         ),
                       ),
                       trailing: currentLayoutSetting == "HL"
@@ -1992,6 +2033,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blueGrey[800],
@@ -2015,9 +2057,11 @@ class _SetupScreenState extends State<SetupScreen> {
                 width: double.infinity,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: Colors.blueGrey[50],
+                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.blueGrey.shade200),
+                  border: Border.all(
+                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
+                  ),
                 ),
                 child: const Center(
                   child: Text(
@@ -2034,9 +2078,11 @@ class _SetupScreenState extends State<SetupScreen> {
                 width: double.infinity,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: Colors.blueGrey[50],
+                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.blueGrey.shade200),
+                  border: Border.all(
+                    color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200,
+                  ),
                 ),
                 child: const Center(
                   child: Text(
@@ -2053,7 +2099,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 width: double.infinity,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: Colors.blueGrey[50],
+                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: Colors.blueGrey.shade200),
                 ),
@@ -2071,16 +2117,18 @@ class _SetupScreenState extends State<SetupScreen> {
               width: double.infinity,
               height: 60,
               decoration: BoxDecoration(
-                color: Colors.grey[200],
+                color: isDark ? Colors.blueGrey[900] : Colors.grey[200],
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(
+                  color: isDark ? Colors.blueGrey[800]! : Colors.grey.shade300,
+                ),
               ),
               child: Center(
                 child: Text(
                   "CLOUD CONFIGURATION",
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey[500],
+                    color: isDark ? Colors.blueGrey[600] : Colors.grey[500],
                   ),
                 ),
               ),
@@ -2142,8 +2190,12 @@ class WarehouseScreen extends StatelessWidget {
                 icon: const Icon(Icons.inventory_2),
                 label: const Text("INVENTORY"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueGrey[50],
-                  foregroundColor: Colors.blueGrey[900],
+                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.blueGrey[800]
+                      : Colors.blueGrey[50],
+                  foregroundColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.blueGrey[900],
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2164,8 +2216,12 @@ class WarehouseScreen extends StatelessWidget {
                 icon: const Icon(Icons.history),
                 label: const Text("HISTORY"),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueGrey[50],
-                  foregroundColor: Colors.blueGrey[900],
+                  backgroundColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.blueGrey[800]
+                      : Colors.blueGrey[50],
+                  foregroundColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.blueGrey[900],
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2324,6 +2380,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     itemCount: _filteredPdfFiles.length,
                     itemBuilder: (context, index) {
                       final file = _filteredPdfFiles[index];
+                      final isDark = Theme.of(context).brightness == Brightness.dark;
                       return Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -2339,7 +2396,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   child: Container(
                                     height: 58,
                                     decoration: BoxDecoration(
-                                      color: Colors.blueGrey[50],
+                                      color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: InkWell(
@@ -2360,10 +2417,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                 _parseInvoiceNameForDisplay(
                                                   file.path,
                                                 ),
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontWeight: FontWeight.w600,
                                                   fontSize: 13.5,
-                                                  color: Colors.black87,
+                                                  color: isDark ? Colors.white : Colors.black87,
                                                 ),
                                                 maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
@@ -2381,7 +2438,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   child: Container(
                                     height: 58,
                                     decoration: BoxDecoration(
-                                      color: Colors.blueGrey[100],
+                                      color: isDark ? Colors.blueGrey[700] : Colors.blueGrey[100],
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: InkWell(
@@ -2391,22 +2448,22 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           XFile(file.path),
                                         ], text: 'Invoice Sharing');
                                       },
-                                      child: const Column(
+                                      child: Column(
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
                                           Icon(
                                             Icons.share,
-                                            color: Colors.blueGrey,
+                                            color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
                                             size: 20,
                                           ),
-                                          SizedBox(height: 2),
+                                          const SizedBox(height: 2),
                                           Text(
                                             "SHARE",
                                             style: TextStyle(
                                               fontSize: 8.5,
                                               fontWeight: FontWeight.bold,
-                                              color: Colors.blueGrey,
+                                              color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
                                             ),
                                           ),
                                         ],
@@ -2636,7 +2693,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         flex: 2,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red[100],
+                            backgroundColor: Theme.of(context).brightness == Brightness.dark
+                                ? Colors.red[900]!.withOpacity(0.4)
+                                : Colors.red[100],
                             padding: EdgeInsets.zero,
                           ),
                           onPressed: () async {
@@ -2787,6 +2846,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
   Widget _buildUnitSelectionButton(String unitLabel) {
     bool isCurrent = _selectedUnit == unitLabel;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2.0),
@@ -2795,9 +2855,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: isCurrent
-                  ? Colors.blueGrey[800]
-                  : Colors.blueGrey[50],
-              foregroundColor: isCurrent ? Colors.white : Colors.blueGrey[900],
+                  ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800])
+                  : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
+              foregroundColor: isCurrent
+                  ? (isDark ? Colors.black : Colors.white)
+                  : (isDark ? Colors.white : Colors.blueGrey[900]),
               elevation: isCurrent ? 2 : 0,
               padding: EdgeInsets.zero,
               shape: RoundedRectangleBorder(
@@ -2805,7 +2867,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                 side: BorderSide(
                   color: isCurrent
                       ? Colors.transparent
-                      : Colors.blueGrey.shade200,
+                      : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200),
                 ),
               ),
             ),
@@ -2962,6 +3024,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                   String formattedDisplayName = regName.isNotEmpty
                       ? "$baseName ($regName)"
                       : baseName;
+                  final isDark = Theme.of(context).brightness == Brightness.dark;
 
                   return Padding(
                     key: ValueKey("item_row_${items[i]['name']}_$i"),
@@ -2982,7 +3045,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           decoration: BoxDecoration(
                             color: isEditing
                                 ? Colors.orange[800]
-                                : Colors.blueGrey[400],
+                                : (isDark ? Colors.blueGrey[600] : Colors.blueGrey[400]),
                             shape: BoxShape.circle,
                           ),
                           alignment: Alignment.center,
@@ -3013,8 +3076,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isEditing
-                                    ? Colors.orange[50]
-                                    : Colors.blueGrey[50],
+                                    ? (isDark ? Colors.orange[900]!.withOpacity(0.3) : Colors.orange[50])
+                                    : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Column(
@@ -3023,17 +3086,17 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                 children: [
                                   Text(
                                     formattedDisplayName,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14.5,
-                                      color: Colors.black87,
+                                      color: isDark ? Colors.white : Colors.black87,
                                     ),
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
                                     "₹${items[i]['rate']}/${items[i]['unit']}",
                                     style: TextStyle(
-                                      color: Colors.grey[700],
+                                      color: isDark ? Colors.grey[300] : Colors.grey[700],
                                       fontSize: 12,
                                     ),
                                   ),
@@ -3048,8 +3111,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: isEditing
-                                  ? Colors.grey[200]
-                                  : Colors.red[100],
+                                  ? (isDark ? Colors.blueGrey[900] : Colors.grey[200])
+                                  : (isDark ? Colors.red[900]!.withOpacity(0.4) : Colors.red[100]),
                               padding: EdgeInsets.zero,
                             ),
                             onPressed: isEditing
