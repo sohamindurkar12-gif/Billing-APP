@@ -72,13 +72,15 @@ class LocalDatabase {
   static Future<Uri?> getBaseFolderUri() async {
     final prefs = await SharedPreferences.getInstance();
     String? uriString = prefs.getString('settings_folder_uri');
-    if (uriString != null) return Uri.parse(uriString);
-
-    final uri = await saf.openDocumentTree();
-    if (uri != null) {
-      await prefs.setString('settings_folder_uri', uri.toString());
+    if (uriString == null) return null;
+    
+    final rootUri = Uri.parse(uriString);
+    var billingAppFolder = await saf.child(rootUri, "Billing APP");
+    if (billingAppFolder == null) {
+      var doc = await saf.createDirectory(rootUri, "Billing APP");
+      return doc?.uri;
     }
-    return uri;
+    return billingAppFolder.uri;
   }
 
   static Future<Uri?> getSettingsFolderUri() async {
