@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:shared_storage/shared_storage.dart' as saf;
@@ -89,11 +89,15 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
           ),
         ),
         dialogTheme: const DialogThemeData(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(28))),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(28)),
+          ),
           elevation: 8,
         ),
         cardTheme: const CardThemeData(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(20)),
+          ),
           elevation: 2,
           margin: EdgeInsets.all(8),
         ),
@@ -105,9 +109,9 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
 
 // --- GLOBAL DATA ---
 Map<String, List<Map<String, String>>> globalInventory = {};
-String currentLayoutSetting = "SBL";
+String currentLayoutSetting = "HL";
 String globalShopName = "RETAIL INVOICE";
-String currentThemeSetting = "DARK";
+String currentThemeSetting = "LIGHT";
 User? currentFirebaseUser;
 
 // --- LOCAL STORAGE HELPER LOGIC ---
@@ -219,9 +223,9 @@ class LocalDatabase {
         if (bytes != null) {
           final content = utf8.decode(bytes);
           Map<String, dynamic> decoded = jsonDecode(content);
-          currentLayoutSetting = decoded["layout"] ?? "SBL";
+          currentLayoutSetting = decoded["layout"] ?? "HL";
           globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
-          currentThemeSetting = decoded["theme"] ?? "DARK";
+          currentThemeSetting = decoded["theme"] ?? "LIGHT";
         }
       }
     } catch (e) {
@@ -358,9 +362,9 @@ class CloudDatabase {
           .get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
-        currentLayoutSetting = data['layout'] ?? "SBL";
+        currentLayoutSetting = data['layout'] ?? "HL";
         globalShopName = data['shopName'] ?? "RETAIL INVOICE";
-        currentThemeSetting = data['theme'] ?? "DARK";
+        currentThemeSetting = data['theme'] ?? "LIGHT";
         // Also save to local disk
         await LocalDatabase.saveAppSettings();
       }
@@ -760,7 +764,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            "SHOW RATE",
+                            "SHOW RATE COLUMN IN BILL",
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
@@ -1868,11 +1872,14 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   // Internal logic to run an inventory save and return the written File handle (cached locally for sharing)
-  Future<void> _exportAndShareFiles(bool shareInventory, bool shareSettings) async {
+  Future<void> _exportAndShareFiles(
+    bool shareInventory,
+    bool shareSettings,
+  ) async {
     try {
       final backupUri = await LocalDatabase.getBackupsFolderUri();
       if (backupUri == null) return;
-      
+
       List<XFile> filesToShare = [];
       final tempDir = Directory.systemTemp;
 
@@ -1923,18 +1930,21 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed to share backup: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed to share backup: $e")));
       }
     }
   }
 
-  Future<void> _importLocalBackup(bool importInventory, bool importSettings) async {
+  Future<void> _importLocalBackup(
+    bool importInventory,
+    bool importSettings,
+  ) async {
     try {
       final backupUri = await LocalDatabase.getBackupsFolderUri();
       if (backupUri == null) return;
-      
+
       bool inventorySuccess = false;
       bool settingsSuccess = false;
 
@@ -1947,14 +1957,19 @@ class _SetupScreenState extends State<SetupScreen> {
             Map<String, dynamic> decoded = jsonDecode(content);
             Map<String, List<Map<String, String>>> verifiedInventory = {};
             decoded.forEach((key, value) {
-              verifiedInventory[key] = (value as List).map((item) => Map<String, String>.from(item)).toList();
+              verifiedInventory[key] = (value as List)
+                  .map((item) => Map<String, String>.from(item))
+                  .toList();
             });
             globalInventory = verifiedInventory;
             await LocalDatabase.saveToDisk();
             inventorySuccess = true;
           }
         } else {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Inventory backup file not found.")));
+          if (mounted)
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Inventory backup file not found.")),
+            );
         }
       }
 
@@ -1965,14 +1980,19 @@ class _SetupScreenState extends State<SetupScreen> {
           if (bytes != null) {
             final content = utf8.decode(bytes);
             Map<String, dynamic> decoded = jsonDecode(content);
-            currentLayoutSetting = decoded["layout"] ?? "SBL";
+            currentLayoutSetting = decoded["layout"] ?? "HL";
             globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
-            currentThemeSetting = decoded["theme"] ?? "DARK";
+            currentThemeSetting = decoded["theme"] ?? "LIGHT";
             await LocalDatabase.saveAppSettings();
             settingsSuccess = true;
           }
         } else {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("App settings backup file not found.")));
+          if (mounted)
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("App settings backup file not found."),
+              ),
+            );
         }
       }
 
@@ -1996,6 +2016,7 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     }
   }
+
   void _showCenterBackupMenu() {
     bool exportInventory = false;
     bool exportSettings = false;
@@ -2027,7 +2048,9 @@ class _SetupScreenState extends State<SetupScreen> {
                         Checkbox(
                           value: exportInventory,
                           onChanged: (val) {
-                            setDialogState(() => exportInventory = val ?? false);
+                            setDialogState(
+                              () => exportInventory = val ?? false,
+                            );
                           },
                         ),
                         const Text("INVENTORY", style: TextStyle(fontSize: 12)),
@@ -2041,7 +2064,10 @@ class _SetupScreenState extends State<SetupScreen> {
                             setDialogState(() => exportSettings = val ?? false);
                           },
                         ),
-                        const Text("APP SETTINGS", style: TextStyle(fontSize: 12)),
+                        const Text(
+                          "APP SETTINGS",
+                          style: TextStyle(fontSize: 12),
+                        ),
                       ],
                     ),
                   ],
@@ -2055,42 +2081,57 @@ class _SetupScreenState extends State<SetupScreen> {
                       child: SizedBox(
                         height: 50,
                         child: ElevatedButton.icon(
-                          onPressed: !anySelected ? null : () async {
-                            if (currentFirebaseUser == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Please sign in first!")),
-                              );
-                              return;
-                            }
-                            final messenger = ScaffoldMessenger.of(context);
-                            Navigator.pop(context);
+                          onPressed: !anySelected
+                              ? null
+                              : () async {
+                                  if (currentFirebaseUser == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text("Please sign in first!"),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  Navigator.pop(context);
 
-                            if (!await CloudDatabase.hasInternetConnection()) {
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text("Failed: No internet connection!"),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                              return;
-                            }
+                                  if (!await CloudDatabase.hasInternetConnection()) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Failed: No internet connection!",
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                            messenger.showSnackBar(
-                              const SnackBar(content: Text("Exporting to cloud...")),
-                            );
-                            if (exportInventory) await CloudDatabase.syncInventoryToCloud();
-                            if (exportSettings) await CloudDatabase.syncSettingsToCloud();
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text("Export complete!"),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          },
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Exporting to cloud..."),
+                                    ),
+                                  );
+                                  if (exportInventory)
+                                    await CloudDatabase.syncInventoryToCloud();
+                                  if (exportSettings)
+                                    await CloudDatabase.syncSettingsToCloud();
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Export complete!"),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                },
                           icon: const Icon(Icons.cloud_upload_outlined),
                           label: const Text(
                             "EXPORT TO CLOUD",
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             disabledBackgroundColor: Colors.grey[200],
@@ -2111,10 +2152,15 @@ class _SetupScreenState extends State<SetupScreen> {
                       child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: !anySelected ? null : () {
-                            Navigator.pop(context);
-                            _exportAndShareFiles(exportInventory, exportSettings);
-                          },
+                          onPressed: !anySelected
+                              ? null
+                              : () {
+                                  Navigator.pop(context);
+                                  _exportAndShareFiles(
+                                    exportInventory,
+                                    exportSettings,
+                                  );
+                                },
                           style: ElevatedButton.styleFrom(
                             disabledBackgroundColor: Colors.grey[200],
                             disabledForegroundColor: Colors.grey[500],
@@ -2145,45 +2191,60 @@ class _SetupScreenState extends State<SetupScreen> {
                       child: SizedBox(
                         height: 50,
                         child: ElevatedButton.icon(
-                          onPressed: !anySelected ? null : () async {
-                            if (currentFirebaseUser == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Please sign in first!")),
-                              );
-                              return;
-                            }
-                            final messenger = ScaffoldMessenger.of(context);
-                            Navigator.pop(context);
+                          onPressed: !anySelected
+                              ? null
+                              : () async {
+                                  if (currentFirebaseUser == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text("Please sign in first!"),
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
+                                  Navigator.pop(context);
 
-                            if (!await CloudDatabase.hasInternetConnection()) {
-                              messenger.showSnackBar(
-                                const SnackBar(
-                                  content: Text("Failed: No internet connection!"),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                              return;
-                            }
+                                  if (!await CloudDatabase.hasInternetConnection()) {
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          "Failed: No internet connection!",
+                                        ),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                    return;
+                                  }
 
-                            messenger.showSnackBar(
-                              const SnackBar(content: Text("Importing from cloud...")),
-                            );
-                            if (exportInventory) await CloudDatabase.loadInventoryFromCloud();
-                            if (exportSettings) {
-                               await CloudDatabase.loadSettingsFromCloud();
-                               smartBillingAppKey.currentState?.rebuildApp();
-                            }
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text("Import complete!"),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                          },
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Importing from cloud..."),
+                                    ),
+                                  );
+                                  if (exportInventory)
+                                    await CloudDatabase.loadInventoryFromCloud();
+                                  if (exportSettings) {
+                                    await CloudDatabase.loadSettingsFromCloud();
+                                    smartBillingAppKey.currentState
+                                        ?.rebuildApp();
+                                  }
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Import complete!"),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                },
                           icon: const Icon(Icons.cloud_download_outlined),
                           label: const Text(
                             "IMPORT FROM CLOUD",
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             disabledBackgroundColor: Colors.grey[200],
@@ -2204,10 +2265,15 @@ class _SetupScreenState extends State<SetupScreen> {
                       child: SizedBox(
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: !anySelected ? null : () {
-                            Navigator.pop(context);
-                            _importLocalBackup(exportInventory, exportSettings);
-                          },
+                          onPressed: !anySelected
+                              ? null
+                              : () {
+                                  Navigator.pop(context);
+                                  _importLocalBackup(
+                                    exportInventory,
+                                    exportSettings,
+                                  );
+                                },
                           style: ElevatedButton.styleFrom(
                             disabledBackgroundColor: Colors.grey[200],
                             disabledForegroundColor: Colors.grey[500],
@@ -2234,6 +2300,7 @@ class _SetupScreenState extends State<SetupScreen> {
       ),
     );
   }
+
   void _showAppSettingsMenu() {
     String tempShopName = globalShopName;
     String tempTheme = currentThemeSetting;
@@ -2304,7 +2371,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     const SizedBox(height: 20),
 
                     const Text(
-                      "SHOP NAME",
+                      "SHOP NAME ( Will be displayed at top in BILL)",
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -3322,10 +3389,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                               setState(() {});
                             }
                           },
-                          child: const Icon(
-                            Icons.delete,
-                            color: Colors.red,
-                          ),
+                          child: const Icon(Icons.delete, color: Colors.red),
                         ),
                       ),
                     ],
@@ -3458,44 +3522,44 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
         height: 45,
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-              backgroundColor: isCurrent
-                  ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800])
-                  : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
-              foregroundColor: isCurrent
-                  ? (isDark ? Colors.black : Colors.white)
-                  : (isDark ? Colors.white : Colors.blueGrey[900]),
-              elevation: isCurrent ? 2 : 0,
+            backgroundColor: isCurrent
+                ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800])
+                : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
+            foregroundColor: isCurrent
+                ? (isDark ? Colors.black : Colors.white)
+                : (isDark ? Colors.white : Colors.blueGrey[900]),
+            elevation: isCurrent ? 2 : 0,
 
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(
-                  color: isCurrent
-                      ? Colors.transparent
-                      : (isDark
-                            ? Colors.blueGrey[700]!
-                            : Colors.blueGrey.shade200),
-                ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: isCurrent
+                    ? Colors.transparent
+                    : (isDark
+                          ? Colors.blueGrey[700]!
+                          : Colors.blueGrey.shade200),
               ),
             ),
-            onPressed: () => setState(() => _selectedUnit = unitLabel),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  unitLabel,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: unitLabel == "GRAM" ? 10 : 11,
-                  ),
+          ),
+          onPressed: () => setState(() => _selectedUnit = unitLabel),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                unitLabel,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: unitLabel == "GRAM" ? 10 : 11,
                 ),
-                if (isCurrent) ...[
-                  const SizedBox(width: 2),
-                  const Icon(Icons.check, size: 11, color: Colors.white),
-                ],
+              ),
+              if (isCurrent) ...[
+                const SizedBox(width: 2),
+                const Icon(Icons.check, size: 11, color: Colors.white),
               ],
-            ),
+            ],
           ),
         ),
+      ),
     );
   }
 
