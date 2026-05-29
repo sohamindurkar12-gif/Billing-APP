@@ -109,10 +109,128 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
 
 // --- GLOBAL DATA ---
 Map<String, List<Map<String, String>>> globalInventory = {};
+Map<String, String> globalCategoryColors = {};
 String currentLayoutSetting = "HL";
 String globalShopName = "RETAIL INVOICE";
 String currentThemeSetting = "LIGHT";
 User? currentFirebaseUser;
+
+// --- COLOR CONSTANTS & PICKER UI ---
+const List<String> presetColors = [
+  "#E0E0E0", "#FFF59D", "#C8E6C9", "#B2EBF2", "#BBDEFB", "#F8BBD0",
+  "#9E9E9E", "#D7CCC8", "#AED581", "#4DB6AC", "#64B5F6", "#CE93D8",
+  "#FFCA28", "#FF9800", "#4CAF50", "#2196F3", "#BA68C8", "#F06292",
+  "#F4511E", "#F44336", "#827717", "#3F51B5", "#9C27B0", "#E91E63",
+  "#616161", "#795548", "#B71C1C", "#1B5E20", "#0D47A1", "#4A148C",
+];
+
+Color parseHexColor(String? hexString) {
+  if (hexString == null || hexString.isEmpty) return Colors.transparent;
+  try {
+    return Color(int.parse(hexString.replaceFirst('#', '0xFF')));
+  } catch (e) {
+    return Colors.transparent;
+  }
+}
+
+Future<String?> showColorPickerDialog(
+  BuildContext context,
+  String? currentColor, {
+  bool isEditing = false,
+}) async {
+  String selected = currentColor ?? presetColors.first;
+  return await showDialog<String>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          return AlertDialog(
+            title: Text(
+              "CHOOSE COLOUR",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : Colors.blueGrey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 6,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                ),
+                itemCount: presetColors.length,
+                itemBuilder: (context, index) {
+                  final colorHex = presetColors[index];
+                  final isSelected = colorHex == selected;
+                  int colorInt = int.parse(colorHex.replaceFirst('#', '0xFF'));
+                  
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        selected = colorHex;
+                      });
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Color(colorInt),
+                        shape: BoxShape.circle,
+                        border: isSelected
+                            ? Border.all(
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white
+                                    : Colors.black,
+                                width: 3,
+                              )
+                            : null,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            actions: [
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, selected),
+                      child: Text(isEditing ? "SAVE" : "ADD"),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[400],
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, null),
+                      child: const Text("CLOSE"),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
 
 // --- LOCAL STORAGE HELPER LOGIC ---
 class LocalDatabase {
@@ -146,7 +264,11 @@ class LocalDatabase {
       final settingsUri = await getSettingsFolderUri();
       if (settingsUri == null) return;
       var file = await saf.child(settingsUri, 'inventory_db.json');
-      final content = jsonEncode(globalInventory);
+      final content = jsonEncode({
+        "_version": 2,
+        "inventory": globalInventory,
+        "categoryColors": globalCategoryColors,
+      });
       final bytes = Uint8List.fromList(utf8.encode(content));
       if (file == null) {
         await saf.createFileAsBytes(
@@ -173,13 +295,30 @@ class LocalDatabase {
         if (bytes != null) {
           final content = utf8.decode(bytes);
           Map<String, dynamic> decoded = jsonDecode(content);
-          Map<String, List<Map<String, String>>> loadedInventory = {};
-          decoded.forEach((key, value) {
-            loadedInventory[key] = (value as List)
-                .map((item) => Map<String, String>.from(item))
-                .toList();
-          });
-          globalInventory = loadedInventory;
+          
+          if (decoded.containsKey('_version') && decoded['_version'] == 2) {
+            Map<String, dynamic> inv = decoded['inventory'] ?? {};
+            Map<String, List<Map<String, String>>> loadedInventory = {};
+            inv.forEach((key, value) {
+              loadedInventory[key] = (value as List)
+                  .map((item) => Map<String, String>.from(item))
+                  .toList();
+            });
+            globalInventory = loadedInventory;
+            
+            Map<String, dynamic> colors = decoded['categoryColors'] ?? {};
+            globalCategoryColors = colors.map((key, value) => MapEntry(key, value.toString()));
+          } else {
+            // Legacy Format Migration
+            Map<String, List<Map<String, String>>> loadedInventory = {};
+            decoded.forEach((key, value) {
+              loadedInventory[key] = (value as List)
+                  .map((item) => Map<String, String>.from(item))
+                  .toList();
+            });
+            globalInventory = loadedInventory;
+            globalCategoryColors = {}; // Default empty for older formats
+          }
         }
       }
     } catch (e) {
@@ -287,7 +426,9 @@ class CloudDatabase {
           .collection('data')
           .doc('inventory')
           .set({
+            '_version': 2,
             'inventory': inventoryData,
+            'categoryColors': globalCategoryColors,
             'lastUpdated': FieldValue.serverTimestamp(),
           });
     } catch (e) {
@@ -308,20 +449,38 @@ class CloudDatabase {
           .get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
-        if (data['inventory'] != null) {
-          Map<String, dynamic> decoded = Map<String, dynamic>.from(
-            data['inventory'],
-          );
-          Map<String, List<Map<String, String>>> loadedInventory = {};
-          decoded.forEach((key, value) {
-            loadedInventory[key] = (value as List)
-                .map((item) => Map<String, String>.from(item))
-                .toList();
-          });
-          globalInventory = loadedInventory;
-          // Also save to local disk so offline works
-          await LocalDatabase.saveToDisk();
+        
+        if (data.containsKey('_version') && data['_version'] == 2) {
+           if (data['inventory'] != null) {
+             Map<String, dynamic> decoded = Map<String, dynamic>.from(data['inventory']);
+             Map<String, List<Map<String, String>>> loadedInventory = {};
+             decoded.forEach((key, value) {
+               loadedInventory[key] = (value as List)
+                   .map((item) => Map<String, String>.from(item))
+                   .toList();
+             });
+             globalInventory = loadedInventory;
+           }
+           if (data['categoryColors'] != null) {
+             Map<String, dynamic> colors = Map<String, dynamic>.from(data['categoryColors']);
+             globalCategoryColors = colors.map((key, value) => MapEntry(key, value.toString()));
+           }
+        } else {
+           if (data['inventory'] != null) {
+             Map<String, dynamic> decoded = Map<String, dynamic>.from(data['inventory']);
+             Map<String, List<Map<String, String>>> loadedInventory = {};
+             decoded.forEach((key, value) {
+               loadedInventory[key] = (value as List)
+                   .map((item) => Map<String, String>.from(item))
+                   .toList();
+             });
+             globalInventory = loadedInventory;
+             globalCategoryColors = {};
+           }
         }
+        
+        // Also save to local disk so offline works
+        await LocalDatabase.saveToDisk();
       }
     } catch (e) {
       debugPrint("Error loading inventory from cloud: $e");
@@ -1305,15 +1464,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           child: Container(
                                             padding: const EdgeInsets.all(12),
                                             decoration: BoxDecoration(
-                                              color:
-                                                  Theme.of(
-                                                        context,
-                                                      ).brightness ==
-                                                      Brightness.dark
+                                              color: Theme.of(context).brightness == Brightness.dark
                                                   ? Colors.blueGrey[800]
                                                   : Colors.blueGrey[50],
-                                              borderRadius:
-                                                  BorderRadius.circular(16),
+                                              borderRadius: BorderRadius.circular(16),
                                             ),
                                             child: Column(
                                               crossAxisAlignment:
@@ -1492,15 +1646,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     String finalTitle = regName.isNotEmpty
                         ? "$baseName ($regName)"
                         : baseName;
-                    return ListTile(
-                      title: Text(
-                        finalTitle,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _searchResults[index]['color'] != null
+                            ? parseHexColor(_searchResults[index]['color'])
+                            : (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blueGrey[800]
+                                : Colors.blueGrey[50]),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      subtitle: Text(
-                        "₹${_searchResults[index]['rate']} per ${_searchResults[index]['unit']}",
+                      child: ListTile(
+                        title: Text(
+                          finalTitle,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: _searchResults[index]['color'] != null
+                                ? Colors.black87
+                                : null,
+                          ),
+                        ),
+                        subtitle: Text(
+                          "₹${_searchResults[index]['rate']} per ${_searchResults[index]['unit']}",
+                          style: TextStyle(
+                            color: _searchResults[index]['color'] != null
+                                ? Colors.black87
+                                : null,
+                          ),
+                        ),
+                        onTap: () => _showItemEntryPopup(_searchResults[index]),
                       ),
-                      onTap: () => _showItemEntryPopup(_searchResults[index]),
                     );
                   },
                 ),
@@ -1536,10 +1711,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final isDark = Theme.of(context).brightness == Brightness.dark;
           return ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isDark
-                  ? Colors.blueGrey[800]
-                  : Colors.blueGrey[50],
-              foregroundColor: isDark ? Colors.white : Colors.blueGrey[900],
+              backgroundColor: globalCategoryColors[categories[index]] != null
+                  ? parseHexColor(globalCategoryColors[categories[index]])
+                  : (isDark
+                      ? Colors.blueGrey[800]
+                      : Colors.blueGrey[50]),
+              foregroundColor: globalCategoryColors[categories[index]] != null
+                  ? Colors.black87
+                  : (isDark ? Colors.white : Colors.blueGrey[900]),
               elevation: 1,
 
               padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1610,12 +1789,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Theme.of(context).brightness == Brightness.dark;
                       return ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: isDark
-                              ? Colors.orange[900]!.withOpacity(0.3)
-                              : Colors.orange[50],
-                          foregroundColor: isDark
-                              ? Colors.orange[100]
-                              : Colors.blueGrey[900],
+                          backgroundColor: item['color'] != null
+                              ? parseHexColor(item['color'])
+                              : (isDark
+                                  ? Colors.orange[900]!.withOpacity(0.3)
+                                  : Colors.orange[50]),
+                          foregroundColor: item['color'] != null
+                              ? Colors.black87
+                              : (isDark
+                                  ? Colors.orange[100]
+                                  : Colors.blueGrey[900]),
 
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                         ),
@@ -1637,9 +1820,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             Text(
                               "₹${item['rate']}",
                               style: TextStyle(
-                                color: isDark
-                                    ? Colors.orange[200]
-                                    : Colors.blueGrey[600],
+                                color: item['color'] != null
+                                    ? Colors.black87
+                                    : (isDark
+                                        ? Colors.orange[200]
+                                        : Colors.blueGrey[600]),
                                 fontSize: 11,
                               ),
                             ),
@@ -3186,6 +3371,12 @@ class CategoriesScreen extends StatefulWidget {
 class _CategoriesScreenState extends State<CategoriesScreen> {
   final TextEditingController _catC = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    _catC.addListener(() => setState(() {}));
+  }
+
   Future<bool> _showWarning(String msg) async {
     return await showDialog<bool>(
           context: context,
@@ -3303,14 +3494,21 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton(
-                    onPressed: () async {
-                      if (_catC.text.isNotEmpty) {
-                        globalInventory[_catC.text] = [];
-                        await LocalDatabase.saveToDisk();
-                        setState(() {});
-                      }
-                      _catC.clear();
-                    },
+                    onPressed: _catC.text.trim().isEmpty
+                        ? null
+                        : () async {
+                            String? color = await showColorPickerDialog(context, null);
+                            if (color != null) {
+                              String catName = _catC.text.trim();
+                              if (catName.isNotEmpty) {
+                                globalInventory[catName] = [];
+                                globalCategoryColors[catName] = color;
+                                await LocalDatabase.saveToDisk();
+                                setState(() {});
+                              }
+                              _catC.clear();
+                            }
+                          },
                     child: const Text("ADD"),
                   ),
                 ),
@@ -3354,10 +3552,16 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         ),
                       ),
                       Expanded(
-                        flex: 8,
+                        flex: 6,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             alignment: Alignment.centerLeft,
+                            backgroundColor: globalCategoryColors[names[i]] != null
+                                ? parseHexColor(globalCategoryColors[names[i]])
+                                : null,
+                            foregroundColor: globalCategoryColors[names[i]] != null
+                                ? Colors.black87
+                                : null,
                           ),
                           onPressed: () => Navigator.push(
                             context,
@@ -3367,6 +3571,33 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             ),
                           ).then((_) => setState(() {})),
                           child: Text(names[i]),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      GestureDetector(
+                        onTap: () async {
+                          String? newColor = await showColorPickerDialog(
+                              context, globalCategoryColors[names[i]],
+                              isEditing: true);
+                          if (newColor != null) {
+                            setState(() {
+                              globalCategoryColors[names[i]] = newColor;
+                            });
+                            await LocalDatabase.saveToDisk();
+                          }
+                        },
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: parseHexColor(globalCategoryColors[names[i]]),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white54
+                                    : Colors.black26,
+                                width: 1.5),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 5),
@@ -3418,6 +3649,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
   final TextEditingController _r = TextEditingController();
   String? _selectedUnit;
   int? _editingIndex;
+  String _selectedColor = presetColors.first;
 
   bool get _isValid =>
       _englishNameController.text.trim().isNotEmpty &&
@@ -3644,44 +3876,82 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               ],
             ),
             const SizedBox(height: 15),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _editingIndex == null
-                      ? Colors.green
-                      : Colors.orange,
-                  disabledBackgroundColor: Colors.grey[300],
-                ),
-                onPressed: !_isValid
-                    ? null
-                    : () async {
-                        var data = {
-                          'name': _englishNameController.text.trim(),
-                          'regional_name': _regionalNameController.text.trim(),
-                          'rate': _r.text.trim(),
-                          'unit': _selectedUnit!,
-                        };
-                        if (_editingIndex == null) {
-                          items.add(data);
-                        } else {
-                          items[_editingIndex!] = data;
-                          _editingIndex = null;
-                        }
-                        await LocalDatabase.saveToDisk();
-                        _englishNameController.clear();
-                        _regionalNameController.clear();
-                        _r.clear();
-                        _selectedUnit = null;
-                        setState(() {});
-                      },
-                child: Text(
-                  _editingIndex == null ? "ADD ITEM" : "SAVE CHANGES",
-                  style: TextStyle(
-                    color: _isValid ? Colors.white : Colors.grey[600],
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () async {
+                    String? newColor = await showColorPickerDialog(
+                      context,
+                      _selectedColor,
+                      isEditing: _editingIndex != null,
+                    );
+                    if (newColor != null) {
+                      setState(() {
+                        _selectedColor = newColor;
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: parseHexColor(_selectedColor),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white54
+                            : Colors.blueGrey,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _editingIndex == null
+                            ? Colors.green
+                            : Colors.orange,
+                        disabledBackgroundColor: Colors.grey[300],
+                      ),
+                      onPressed: !_isValid
+                          ? null
+                          : () async {
+                              var data = {
+                                'name': _englishNameController.text.trim(),
+                                'regional_name': _regionalNameController.text.trim(),
+                                'rate': _r.text.trim(),
+                                'unit': _selectedUnit!,
+                                'color': _selectedColor,
+                              };
+                              if (_editingIndex == null) {
+                                items.add(data);
+                              } else {
+                                items[_editingIndex!] = data;
+                                _editingIndex = null;
+                              }
+                              await LocalDatabase.saveToDisk();
+                              _englishNameController.clear();
+                              _regionalNameController.clear();
+                              _r.clear();
+                              _selectedUnit = null;
+                              _selectedColor = presetColors.first;
+                              setState(() {});
+                            },
+                      child: Text(
+                        _editingIndex == null ? "ADD ITEM" : "SAVE CHANGES",
+                        style: TextStyle(
+                          color: _isValid ? Colors.white : Colors.grey[600],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const Divider(height: 30),
             Expanded(
@@ -3745,6 +4015,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                     items[i]['regional_name'] ?? "";
                                 _r.text = items[i]['rate'] ?? "";
                                 _selectedUnit = items[i]['unit']!;
+                                _selectedColor = items[i]['color'] ?? presetColors.first;
                               });
                             },
                             child: Container(
@@ -3754,9 +4025,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                     ? (isDark
                                           ? Colors.orange[900]!.withOpacity(0.3)
                                           : Colors.orange[50])
-                                    : (isDark
-                                          ? Colors.blueGrey[800]
-                                          : Colors.blueGrey[50]),
+                                    : (items[i]['color'] != null 
+                                          ? parseHexColor(items[i]['color'])
+                                          : (isDark
+                                                ? Colors.blueGrey[800]
+                                                : Colors.blueGrey[50])),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Column(
@@ -3777,9 +4050,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                   Text(
                                     "₹${items[i]['rate']}/${items[i]['unit']}",
                                     style: TextStyle(
-                                      color: isDark
-                                          ? Colors.grey[300]
-                                          : Colors.grey[700],
+                                      color: items[i]['color'] != null
+                                          ? Colors.black87
+                                          : (isDark
+                                                ? Colors.grey[300]
+                                                : Colors.grey[700]),
                                       fontSize: 12,
                                     ),
                                   ),
