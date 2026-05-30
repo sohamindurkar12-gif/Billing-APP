@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:shared_storage/shared_storage.dart' as saf;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -16,16 +18,63 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
+import 'package:window_manager/window_manager.dart';
 
 void main() async {
   // Ensures all Flutter components are completely bound and ready before modifying platform UI settings
   WidgetsFlutterBinding.ensureInitialized();
+  
+  if (Platform.isWindows || Platform.isLinux) {
+    await GoogleSignInDart.register(clientId: '594735884693-v0saapde88haedikdabrhdea0sjejcg9.apps.googleusercontent.com');
+  }
 
   // Immersive Sticky mode hides both the top status bar and bottom navigation bar completely
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  try {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  } catch (e) {
+    debugPrint("SystemUI error: $e");
+  }
 
   // Initialize Firebase
-  await Firebase.initializeApp();
+  try {
+    if (Platform.isWindows) {
+      await Firebase.initializeApp(
+        options: const FirebaseOptions(
+          apiKey: 'AIzaSyD6UmuXUJPjSXWh4bdeHxSG3GNrTT0or0o',
+          appId: '1:594735884693:android:512892312fe4e206a1ae9c',
+          messagingSenderId: '594735884693',
+          projectId: 'billing-app-61a0e',
+          storageBucket: 'billing-app-61a0e.firebasestorage.app',
+        ),
+      );
+    } else {
+      await Firebase.initializeApp();
+    }
+  } catch (e) {
+    debugPrint("Firebase initialization skipped or failed: $e");
+  }
+
+  if (Platform.isWindows) {
+    try {
+      await windowManager.ensureInitialized();
+      WindowOptions windowOptions = const WindowOptions(
+        size: Size(1300, 850),
+        minimumSize: Size(1300, 850),
+        maximumSize: Size(1300, 850),
+        center: true,
+        title: "BILLING APP",
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.setResizable(false);
+        await windowManager.setMaximizable(false);
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    } catch (e) {
+      debugPrint("WindowManager error: $e");
+    }
+  }
 
   runApp(SmartBillingApp(key: smartBillingAppKey));
 }
@@ -117,11 +166,36 @@ User? currentFirebaseUser;
 
 // --- COLOR CONSTANTS & PICKER UI ---
 const List<String> presetColors = [
-  "#E0E0E0", "#FFF59D", "#C8E6C9", "#B2EBF2", "#BBDEFB", "#F8BBD0",
-  "#9E9E9E", "#D7CCC8", "#AED581", "#4DB6AC", "#64B5F6", "#CE93D8",
-  "#FFCA28", "#FF9800", "#4CAF50", "#2196F3", "#BA68C8", "#F06292",
-  "#F4511E", "#F44336", "#827717", "#3F51B5", "#9C27B0", "#E91E63",
-  "#616161", "#795548", "#B71C1C", "#1B5E20", "#0D47A1", "#4A148C",
+  "#E0E0E0",
+  "#FFF59D",
+  "#C8E6C9",
+  "#B2EBF2",
+  "#BBDEFB",
+  "#F8BBD0",
+  "#9E9E9E",
+  "#D7CCC8",
+  "#AED581",
+  "#4DB6AC",
+  "#64B5F6",
+  "#CE93D8",
+  "#FFCA28",
+  "#FF9800",
+  "#4CAF50",
+  "#2196F3",
+  "#BA68C8",
+  "#F06292",
+  "#F4511E",
+  "#F44336",
+  "#827717",
+  "#3F51B5",
+  "#9C27B0",
+  "#E91E63",
+  "#616161",
+  "#795548",
+  "#B71C1C",
+  "#1B5E20",
+  "#0D47A1",
+  "#4A148C",
 ];
 
 Color parseHexColor(String? hexString) {
@@ -137,6 +211,7 @@ Future<String?> showColorPickerDialog(
   BuildContext context,
   String? currentColor, {
   bool isEditing = false,
+  TextEditingController? categoryNameController,
 }) async {
   String selected = currentColor ?? presetColors.first;
   return await showDialog<String>(
@@ -158,10 +233,27 @@ Future<String?> showColorPickerDialog(
               textAlign: TextAlign.center,
             ),
             content: SizedBox(
-              width: double.maxFinite,
-              height: 300,
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              width: 350,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (categoryNameController != null) ...[
+                    TextField(
+                      controller: categoryNameController,
+                      decoration: InputDecoration(
+                        labelText: "Category Name",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                  ],
+                  Flexible(
+                    child: GridView.builder(
+                      shrinkWrap: true,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 6,
                   crossAxisSpacing: 10,
                   mainAxisSpacing: 10,
@@ -196,6 +288,9 @@ Future<String?> showColorPickerDialog(
                 },
               ),
             ),
+          ],
+        ),
+      ),
             actions: [
               Row(
                 children: [
@@ -234,7 +329,20 @@ Future<String?> showColorPickerDialog(
 
 // --- LOCAL STORAGE HELPER LOGIC ---
 class LocalDatabase {
+  static String _getWindowsSettingsDir() {
+    return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\INTERNAL_SETTINGS";
+  }
+
+  static String _getWindowsBackupsDir() {
+    return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\INVENTORY BACKUPS";
+  }
+
+  static String _getWindowsBillsDir() {
+    return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\MYBILLS";
+  }
+
   static Future<Uri?> getBaseFolderUri() async {
+    if (Platform.isWindows) return null;
     final prefs = await SharedPreferences.getInstance();
     String? uriString = prefs.getString('settings_folder_uri');
     if (uriString == null) return null;
@@ -249,6 +357,7 @@ class LocalDatabase {
   }
 
   static Future<Uri?> getSettingsFolderUri() async {
+    if (Platform.isWindows) return null;
     final baseUri = await getBaseFolderUri();
     if (baseUri == null) return null;
     var folder = await saf.child(baseUri, "INTERNAL_SETTINGS");
@@ -261,15 +370,23 @@ class LocalDatabase {
 
   static Future<void> saveToDisk() async {
     try {
-      final settingsUri = await getSettingsFolderUri();
-      if (settingsUri == null) return;
-      var file = await saf.child(settingsUri, 'inventory_db.json');
       final content = jsonEncode({
         "_version": 2,
         "inventory": globalInventory,
         "categoryColors": globalCategoryColors,
       });
       final bytes = Uint8List.fromList(utf8.encode(content));
+
+      if (Platform.isWindows) {
+        String dir = _getWindowsSettingsDir();
+        Directory(dir).createSync(recursive: true);
+        await File("$dir\\inventory_db.json").writeAsBytes(bytes);
+        return;
+      }
+
+      final settingsUri = await getSettingsFolderUri();
+      if (settingsUri == null) return;
+      var file = await saf.child(settingsUri, 'inventory_db.json');
       if (file == null) {
         await saf.createFileAsBytes(
           settingsUri,
@@ -287,38 +404,49 @@ class LocalDatabase {
 
   static Future<void> loadFromDisk() async {
     try {
-      final settingsUri = await getSettingsFolderUri();
-      if (settingsUri == null) return;
-      var file = await saf.child(settingsUri, 'inventory_db.json');
-      if (file != null) {
-        final bytes = await saf.getDocumentContent(file.uri);
-        if (bytes != null) {
-          final content = utf8.decode(bytes);
-          Map<String, dynamic> decoded = jsonDecode(content);
-          
-          if (decoded.containsKey('_version') && decoded['_version'] == 2) {
-            Map<String, dynamic> inv = decoded['inventory'] ?? {};
-            Map<String, List<Map<String, String>>> loadedInventory = {};
-            inv.forEach((key, value) {
-              loadedInventory[key] = (value as List)
-                  .map((item) => Map<String, String>.from(item))
-                  .toList();
-            });
-            globalInventory = loadedInventory;
-            
-            Map<String, dynamic> colors = decoded['categoryColors'] ?? {};
-            globalCategoryColors = colors.map((key, value) => MapEntry(key, value.toString()));
-          } else {
-            // Legacy Format Migration
-            Map<String, List<Map<String, String>>> loadedInventory = {};
-            decoded.forEach((key, value) {
-              loadedInventory[key] = (value as List)
-                  .map((item) => Map<String, String>.from(item))
-                  .toList();
-            });
-            globalInventory = loadedInventory;
-            globalCategoryColors = {}; // Default empty for older formats
-          }
+      String? content;
+      if (Platform.isWindows) {
+        String fileStr = "${_getWindowsSettingsDir()}\\inventory_db.json";
+        if (File(fileStr).existsSync()) {
+          content = await File(fileStr).readAsString();
+        }
+      } else {
+        final settingsUri = await getSettingsFolderUri();
+        if (settingsUri == null) return;
+        var file = await saf.child(settingsUri, 'inventory_db.json');
+        if (file != null) {
+          final bytes = await saf.getDocumentContent(file.uri);
+          if (bytes != null) content = utf8.decode(bytes);
+        }
+      }
+
+      if (content != null) {
+        Map<String, dynamic> decoded = jsonDecode(content);
+
+        if (decoded.containsKey('_version') && decoded['_version'] == 2) {
+          Map<String, dynamic> inv = decoded['inventory'] ?? {};
+          Map<String, List<Map<String, String>>> loadedInventory = {};
+          inv.forEach((key, value) {
+            loadedInventory[key] = (value as List)
+                .map((item) => Map<String, String>.from(item))
+                .toList();
+          });
+          globalInventory = loadedInventory;
+
+          Map<String, dynamic> colors = decoded['categoryColors'] ?? {};
+          globalCategoryColors = colors.map(
+            (key, value) => MapEntry(key, value.toString()),
+          );
+        } else {
+          // Legacy Format Migration
+          Map<String, List<Map<String, String>>> loadedInventory = {};
+          decoded.forEach((key, value) {
+            loadedInventory[key] = (value as List)
+                .map((item) => Map<String, String>.from(item))
+                .toList();
+          });
+          globalInventory = loadedInventory;
+          globalCategoryColors = {}; // Default empty for older formats
         }
       }
     } catch (e) {
@@ -328,15 +456,23 @@ class LocalDatabase {
 
   static Future<void> saveAppSettings() async {
     try {
-      final settingsUri = await getSettingsFolderUri();
-      if (settingsUri == null) return;
-      var file = await saf.child(settingsUri, 'app_settings.json');
       final content = jsonEncode({
         "layout": currentLayoutSetting,
         "shopName": globalShopName,
         "theme": currentThemeSetting,
       });
       final bytes = Uint8List.fromList(utf8.encode(content));
+
+      if (Platform.isWindows) {
+        String dir = _getWindowsSettingsDir();
+        Directory(dir).createSync(recursive: true);
+        await File("$dir\\app_settings.json").writeAsBytes(bytes);
+        return;
+      }
+
+      final settingsUri = await getSettingsFolderUri();
+      if (settingsUri == null) return;
+      var file = await saf.child(settingsUri, 'app_settings.json');
       if (file == null) {
         await saf.createFileAsBytes(
           settingsUri,
@@ -354,18 +490,27 @@ class LocalDatabase {
 
   static Future<void> loadAppSettings() async {
     try {
-      final settingsUri = await getSettingsFolderUri();
-      if (settingsUri == null) return;
-      var file = await saf.child(settingsUri, 'app_settings.json');
-      if (file != null) {
-        final bytes = await saf.getDocumentContent(file.uri);
-        if (bytes != null) {
-          final content = utf8.decode(bytes);
-          Map<String, dynamic> decoded = jsonDecode(content);
-          currentLayoutSetting = decoded["layout"] ?? "HL";
-          globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
-          currentThemeSetting = decoded["theme"] ?? "LIGHT";
+      String? content;
+      if (Platform.isWindows) {
+        String fileStr = "${_getWindowsSettingsDir()}\\app_settings.json";
+        if (File(fileStr).existsSync()) {
+          content = await File(fileStr).readAsString();
         }
+      } else {
+        final settingsUri = await getSettingsFolderUri();
+        if (settingsUri == null) return;
+        var file = await saf.child(settingsUri, 'app_settings.json');
+        if (file != null) {
+          final bytes = await saf.getDocumentContent(file.uri);
+          if (bytes != null) content = utf8.decode(bytes);
+        }
+      }
+
+      if (content != null) {
+        Map<String, dynamic> decoded = jsonDecode(content);
+        currentLayoutSetting = decoded["layout"] ?? "HL";
+        globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
+        currentThemeSetting = decoded["theme"] ?? "LIGHT";
       }
     } catch (e) {
       debugPrint("Error loading app configuration: $e");
@@ -373,6 +518,7 @@ class LocalDatabase {
   }
 
   static Future<Uri?> getBackupsFolderUri() async {
+    if (Platform.isWindows) return null;
     final baseUri = await getBaseFolderUri();
     if (baseUri == null) return null;
     var folder = await saf.child(baseUri, "INVENTORY BACKUPS");
@@ -384,6 +530,7 @@ class LocalDatabase {
   }
 
   static Future<Uri?> getMyBillsFolderUri() async {
+    if (Platform.isWindows) return null;
     final baseUri = await getBaseFolderUri();
     if (baseUri == null) return null;
     var folder = await saf.child(baseUri, "MYBILLS");
@@ -429,6 +576,7 @@ class CloudDatabase {
             '_version': 2,
             'inventory': inventoryData,
             'categoryColors': globalCategoryColors,
+            'categoryOrder': globalInventory.keys.toList(),
             'lastUpdated': FieldValue.serverTimestamp(),
           });
     } catch (e) {
@@ -449,36 +597,57 @@ class CloudDatabase {
           .get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
-        
+
         if (data.containsKey('_version') && data['_version'] == 2) {
-           if (data['inventory'] != null) {
-             Map<String, dynamic> decoded = Map<String, dynamic>.from(data['inventory']);
-             Map<String, List<Map<String, String>>> loadedInventory = {};
-             decoded.forEach((key, value) {
-               loadedInventory[key] = (value as List)
-                   .map((item) => Map<String, String>.from(item))
-                   .toList();
-             });
-             globalInventory = loadedInventory;
-           }
-           if (data['categoryColors'] != null) {
-             Map<String, dynamic> colors = Map<String, dynamic>.from(data['categoryColors']);
-             globalCategoryColors = colors.map((key, value) => MapEntry(key, value.toString()));
-           }
+          if (data['inventory'] != null) {
+            Map<String, dynamic> decoded = Map<String, dynamic>.from(
+              data['inventory'],
+            );
+            Map<String, List<Map<String, String>>> loadedInventory = {};
+            decoded.forEach((key, value) {
+              loadedInventory[key] = (value as List)
+                  .map((item) => Map<String, String>.from(item))
+                  .toList();
+            });
+            if (data.containsKey('categoryOrder') && data['categoryOrder'] != null) {
+              List<String> order = List<String>.from(data['categoryOrder']);
+              Map<String, List<Map<String, String>>> orderedInventory = {};
+              for (String cat in order) {
+                if (loadedInventory.containsKey(cat)) {
+                  orderedInventory[cat] = loadedInventory[cat]!;
+                  loadedInventory.remove(cat);
+                }
+              }
+              orderedInventory.addAll(loadedInventory);
+              globalInventory = orderedInventory;
+            } else {
+              globalInventory = loadedInventory;
+            }
+          }
+          if (data['categoryColors'] != null) {
+            Map<String, dynamic> colors = Map<String, dynamic>.from(
+              data['categoryColors'],
+            );
+            globalCategoryColors = colors.map(
+              (key, value) => MapEntry(key, value.toString()),
+            );
+          }
         } else {
-           if (data['inventory'] != null) {
-             Map<String, dynamic> decoded = Map<String, dynamic>.from(data['inventory']);
-             Map<String, List<Map<String, String>>> loadedInventory = {};
-             decoded.forEach((key, value) {
-               loadedInventory[key] = (value as List)
-                   .map((item) => Map<String, String>.from(item))
-                   .toList();
-             });
-             globalInventory = loadedInventory;
-             globalCategoryColors = {};
-           }
+          if (data['inventory'] != null) {
+            Map<String, dynamic> decoded = Map<String, dynamic>.from(
+              data['inventory'],
+            );
+            Map<String, List<Map<String, String>>> loadedInventory = {};
+            decoded.forEach((key, value) {
+              loadedInventory[key] = (value as List)
+                  .map((item) => Map<String, String>.from(item))
+                  .toList();
+            });
+            globalInventory = loadedInventory;
+            globalCategoryColors = {};
+          }
         }
-        
+
         // Also save to local disk so offline works
         await LocalDatabase.saveToDisk();
       }
@@ -546,6 +715,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoadingDb = true;
   String? _selectedCategoryForGrid;
 
+  // Keyboard shortcut state (Windows only)
+  String _keyBuffer = "";
+  bool _isEditComboMode = false;
+  Timer? _keyDebounceTimer;
+  final FocusNode _homeFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -553,51 +728,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _checkPermissionsAndInit() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? baseUriString = prefs.getString('settings_folder_uri');
+    if (!Platform.isWindows) {
+      final prefs = await SharedPreferences.getInstance();
+      String? baseUriString = prefs.getString('settings_folder_uri');
 
-    if (baseUriString == null ||
-        !(await saf.isPersistedUri(Uri.parse(baseUriString)))) {
-      if (mounted) {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            title: const Text(
-              "STORAGE REQUIRED",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.blueGrey,
-              ),
-            ),
-            content: const Text(
-              "Please select a folder to save your bills and inventory backups safely. We recommend to choose the 'Documents' folder.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text(
-                  "CHOOSE FOLDER",
-                  style: TextStyle(fontWeight: FontWeight.bold),
+      if (baseUriString == null ||
+          !(await saf.isPersistedUri(Uri.parse(baseUriString)))) {
+        if (mounted) {
+          await showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => AlertDialog(
+              title: const Text(
+                "STORAGE REQUIRED",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueGrey,
                 ),
               ),
-            ],
-          ),
-        );
-      }
-      final uri = await saf.openDocumentTree(persistablePermission: true);
-      if (uri != null) {
-        await prefs.setString('settings_folder_uri', uri.toString());
-      } else {
-        return; // User cancelled
+              content: const Text(
+                "Please select a folder to save your bills and inventory backups safely. We recommend to choose the 'Documents' folder.",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text(
+                    "CHOOSE FOLDER",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        final uri = await saf.openDocumentTree(persistablePermission: true);
+        if (uri != null) {
+          await prefs.setString('settings_folder_uri', uri.toString());
+        } else {
+          return; // User cancelled
+        }
       }
     }
 
     await LocalDatabase.loadFromDisk();
     await LocalDatabase.loadAppSettings();
 
-    // Check if user was previously signed in
-    currentFirebaseUser = FirebaseAuth.instance.currentUser;
+    try {
+      currentFirebaseUser = FirebaseAuth.instance.currentUser;
+      if (currentFirebaseUser == null) {
+        // Attempt silent sign in if Firebase forgot the session but GoogleSignIn remembers it
+        final googleSignIn = GoogleSignIn();
+        final googleUser = await googleSignIn.signInSilently();
+        if (googleUser != null) {
+          final googleAuth = await googleUser.authentication;
+          final credential = GoogleAuthProvider.credential(
+            accessToken: googleAuth.accessToken,
+            idToken: googleAuth.idToken,
+          );
+          final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+          currentFirebaseUser = userCredential.user;
+        }
+      }
+    } catch (e) {
+      debugPrint("Firebase auth error: $e");
+    }
 
     smartBillingAppKey.currentState?.rebuildApp();
     setState(() {
@@ -614,8 +808,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           barrierDismissible: false,
           builder: (BuildContext ctx) {
             return Dialog(
-              child: Container(
-                padding: const EdgeInsets.all(20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -684,8 +880,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-            );
-          },
+            ),
+          );
+        },
         ) ??
         false;
   }
@@ -706,12 +903,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double grandTotal = _cart.fold(0, (sum, item) => sum + item['total']);
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
+          return [
               pw.Center(
                 child: pw.Text(
                   globalShopName.toUpperCase(),
@@ -836,11 +1031,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ],
               ),
-            ],
-          );
+          ];
         },
       ),
     );
+
+    if (Platform.isWindows) {
+      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String dir = "$baseDir\\Billing APP\\MYBILLS";
+      Directory(dir).createSync(recursive: true);
+      File file = File("$dir\\$finalFileName.pdf");
+      await file.writeAsBytes(await pdf.save());
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
+        setState(() => _cart = []);
+      }
+      return;
+    }
 
     final pathUri = await LocalDatabase.getMyBillsFolderUri();
     if (pathUri != null) {
@@ -867,11 +1076,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        child: StatefulBuilder(
-          builder: (context, setPopupState) {
-            return Container(
-              padding: const EdgeInsets.all(15),
+      builder: (context) => Focus(
+        onKeyEvent: (node, event) {
+          if (!Platform.isWindows) return KeyEventResult.ignored;
+          if (event is KeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.backspace && HardwareKeyboard.instance.isShiftPressed) {
+              Navigator.pop(context);
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Dialog(
+          child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: StatefulBuilder(
+            builder: (context, setPopupState) {
+              return Container(
+                padding: const EdgeInsets.all(15),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -888,8 +1110,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 15),
                   TextField(
+                    autofocus: true,
                     controller: nameController,
                     textCapitalization: TextCapitalization.words,
+                    onSubmitted: (val) {
+                      Navigator.pop(context);
+                      _generatePDF(
+                        val.trim().isEmpty ? "CASH" : val.trim(),
+                        globalShowRateSetting,
+                      );
+                    },
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(
                         RegExp(r'[a-zA-Z0-9\s\-.,()&/\\]'),
@@ -969,7 +1199,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ? null
                                 : () {
                                     Navigator.pop(context);
-                                    Navigator.pop(context);
                                     _generatePDF(
                                       nameController.text.trim(),
                                       globalShowRateSetting,
@@ -1018,7 +1247,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             onPressed: () {
                               Navigator.pop(context);
-                              Navigator.pop(context);
                               _generatePDF("CASH", globalShowRateSetting);
                             },
                             child: const Text(
@@ -1035,8 +1263,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ],
               ),
-            );
-          },
+              );
+            },
+          ),
+          ),
         ),
       ),
     );
@@ -1083,6 +1313,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String completeDisplayName = regName.isNotEmpty
         ? "$baseName ($regName)"
         : baseName;
+
+    final FocusNode numpadFocusNode = FocusNode();
 
     showDialog(
       context: context,
@@ -1132,252 +1364,589 @@ class _DashboardScreenState extends State<DashboardScreen> {
               });
             }
 
-            return Container(
-              padding: const EdgeInsets.all(15),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          completeDisplayName.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => setPopupState(() {
-                            editingQty = true;
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? (editingQty
-                                        ? Colors.blue[900]!.withOpacity(0.3)
-                                        : Colors.blueGrey[900])
-                                  : (editingQty
-                                        ? Colors.blue[50]
-                                        : Colors.grey[100]),
-                              border: Border.all(
-                                color: editingQty
-                                    ? Colors.blue
-                                    : (Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.blueGrey[700]!
-                                          : Colors.grey.shade300),
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Column(
-                              children: [
-                                Text("QTY ($currentUnit)"),
-                                Text(
-                                  localQty,
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => setPopupState(() {
-                            editingQty = false;
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? (!editingQty
-                                        ? Colors.blue[900]!.withOpacity(0.3)
-                                        : Colors.blueGrey[900])
-                                  : (!editingQty
-                                        ? Colors.blue[50]
-                                        : Colors.grey[100]),
-                              border: Border.all(
-                                color: !editingQty
-                                    ? Colors.blue
-                                    : (Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? Colors.blueGrey[700]!
-                                          : Colors.grey.shade300),
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Column(
-                              children: [
-                                Text(
-                                  "RATE (₹/$masterUnit)",
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  localRate,
-                                  style: const TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: allowedUnits
-                        .map(
-                          (u) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: ChoiceChip(
-                              label: Text(
-                                u,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              selected: currentUnit == u,
-                              onSelected: (masterUnit == "PCS")
-                                  ? null
-                                  : (v) => setPopupState(() => currentUnit = u),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                  const SizedBox(height: 15),
-                  GridView.count(
-                    shrinkWrap: true,
-                    crossAxisCount: 3,
-                    childAspectRatio: 1.6,
-                    mainAxisSpacing: 8,
-                    crossAxisSpacing: 8,
-                    children:
-                        [
-                              "1",
-                              "2",
-                              "3",
-                              "4",
-                              "5",
-                              "6",
-                              "7",
-                              "8",
-                              "9",
-                              ".",
-                              "0",
-                              "DEL",
-                            ]
-                            .map(
-                              (e) => ElevatedButton(
-                                onPressed: () => handleNumpad(e),
-                                child: Text(
-                                  e,
-                                  style: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blueGrey,
-                                  ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                  ),
-                  const SizedBox(height: 15),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () {
-                        double q = double.tryParse(localQty) ?? 0;
-                        double r = double.tryParse(localRate) ?? 0;
+            void submitEntry() {
+              double q = double.tryParse(localQty) ?? 0;
+              double r = double.tryParse(localRate) ?? 0;
+              
+              if (q == 0 || r == 0) return;
 
-                        double total = 0.0;
-                        if (masterUnit == currentUnit) {
-                          total = q * r;
-                        } else if (masterUnit == "Kg" &&
-                            currentUnit == "GRAM") {
-                          total = (q / 1000.0) * r;
-                        } else if (masterUnit == "GRAM" &&
-                            currentUnit == "Kg") {
-                          total = (q * 1000.0) * r;
-                        } else if (masterUnit == "Ltr" && currentUnit == "ML") {
-                          total = (q / 1000.0) * r;
-                        } else if (masterUnit == "ML" && currentUnit == "Ltr") {
-                          total = (q * 1000.0) * r;
-                        } else {
-                          total = q * r;
+              double total = 0.0;
+              if (masterUnit == currentUnit) {
+                total = q * r;
+              } else if (masterUnit == "Kg" && currentUnit == "GRAM") {
+                total = (q / 1000.0) * r;
+              } else if (masterUnit == "GRAM" && currentUnit == "Kg") {
+                total = (q * 1000.0) * r;
+              } else if (masterUnit == "Ltr" && currentUnit == "ML") {
+                total = (q / 1000.0) * r;
+              } else if (masterUnit == "ML" && currentUnit == "Ltr") {
+                total = (q * 1000.0) * r;
+              } else {
+                total = q * r;
+              }
+
+              setState(() {
+                var entryData = {
+                  'name': completeDisplayName,
+                  'qty': localQty,
+                  'rate': localRate,
+                  'unit': currentUnit,
+                  'total': total,
+                };
+                if (editCartIndex != null) {
+                  _cart[editCartIndex] = entryData;
+                } else {
+                  _cart.add(entryData);
+                }
+                _searchController.clear();
+                _searchResults = [];
+                _selectedCategoryForGrid = null;
+              });
+              Navigator.pop(context);
+            }
+
+            return RawKeyboardListener(
+              focusNode: numpadFocusNode..requestFocus(),
+              onKey: (event) {
+                if (event is RawKeyDownEvent) {
+                  final key = event.logicalKey;
+                  final isShift = HardwareKeyboard.instance.isShiftPressed;
+
+                  if (Platform.isWindows) {
+                    if (key == LogicalKeyboardKey.arrowLeft) {
+                      if (isShift) {
+                        if (allowedUnits.length > 1) {
+                          setPopupState(() {
+                            currentUnit = currentUnit == allowedUnits[0] ? allowedUnits[1] : allowedUnits[0];
+                          });
                         }
-
+                      } else {
+                        setPopupState(() => editingQty = true);
+                      }
+                      return;
+                    }
+                    if (key == LogicalKeyboardKey.arrowRight) {
+                      if (isShift) {
+                        if (allowedUnits.length > 1) {
+                          setPopupState(() {
+                            currentUnit = currentUnit == allowedUnits[0] ? allowedUnits[1] : allowedUnits[0];
+                          });
+                        }
+                      } else {
+                        setPopupState(() => editingQty = false);
+                      }
+                      return;
+                    }
+                    if (key == LogicalKeyboardKey.backspace) {
+                      if (isShift) {
+                        Navigator.pop(context);
+                        return;
+                      }
+                    }
+                    if (key == LogicalKeyboardKey.delete) {
+                      if (isShift && editCartIndex != null) {
                         setState(() {
-                          var entryData = {
-                            'name': completeDisplayName,
-                            'qty': localQty,
-                            'rate': localRate,
-                            'unit': currentUnit,
-                            'total': total,
-                          };
-                          if (editCartIndex != null) {
-                            _cart[editCartIndex] = entryData;
-                          } else {
-                            _cart.add(entryData);
-                          }
+                          _cart.removeAt(editCartIndex);
                           _searchController.clear();
                           _searchResults = [];
                           _selectedCategoryForGrid = null;
                         });
                         Navigator.pop(context);
-                      },
-                      child: Text(
-                        editCartIndex != null
-                            ? "UPDATE TO BILL"
-                            : "ADD TO BILL",
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                        return;
+                      }
+                    }
+                  }
+
+                  if (key == LogicalKeyboardKey.digit0 ||
+                      key == LogicalKeyboardKey.numpad0)
+                    handleNumpad("0");
+                  else if (key == LogicalKeyboardKey.digit1 ||
+                      key == LogicalKeyboardKey.numpad1)
+                    handleNumpad("1");
+                  else if (key == LogicalKeyboardKey.digit2 ||
+                      key == LogicalKeyboardKey.numpad2)
+                    handleNumpad("2");
+                  else if (key == LogicalKeyboardKey.digit3 ||
+                      key == LogicalKeyboardKey.numpad3)
+                    handleNumpad("3");
+                  else if (key == LogicalKeyboardKey.digit4 ||
+                      key == LogicalKeyboardKey.numpad4)
+                    handleNumpad("4");
+                  else if (key == LogicalKeyboardKey.digit5 ||
+                      key == LogicalKeyboardKey.numpad5)
+                    handleNumpad("5");
+                  else if (key == LogicalKeyboardKey.digit6 ||
+                      key == LogicalKeyboardKey.numpad6)
+                    handleNumpad("6");
+                  else if (key == LogicalKeyboardKey.digit7 ||
+                      key == LogicalKeyboardKey.numpad7)
+                    handleNumpad("7");
+                  else if (key == LogicalKeyboardKey.digit8 ||
+                      key == LogicalKeyboardKey.numpad8)
+                    handleNumpad("8");
+                  else if (key == LogicalKeyboardKey.digit9 ||
+                      key == LogicalKeyboardKey.numpad9)
+                    handleNumpad("9");
+                  else if (key == LogicalKeyboardKey.period ||
+                      key == LogicalKeyboardKey.numpadDecimal)
+                    handleNumpad(".");
+                  else if (key == LogicalKeyboardKey.backspace ||
+                      key == LogicalKeyboardKey.delete)
+                    handleNumpad("DEL");
+                  else if (key == LogicalKeyboardKey.enter ||
+                      key == LogicalKeyboardKey.numpadEnter)
+                    submitEntry();
+                }
+              },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 450),
+                child: Container(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              completeDisplayName.toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.red),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const Divider(),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setPopupState(() {
+                                editingQty = true;
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? (editingQty
+                                            ? Colors.blue[900]!.withOpacity(0.3)
+                                            : Colors.blueGrey[900])
+                                      : (editingQty
+                                            ? Colors.blue[50]
+                                            : Colors.grey[100]),
+                                  border: Border.all(
+                                    color: editingQty
+                                        ? Colors.blue
+                                        : (Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? Colors.blueGrey[700]!
+                                              : Colors.grey.shade300),
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text("QTY ($currentUnit)"),
+                                    Text(
+                                      localQty,
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setPopupState(() {
+                                editingQty = false;
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? (!editingQty
+                                            ? Colors.blue[900]!.withOpacity(0.3)
+                                            : Colors.blueGrey[900])
+                                      : (!editingQty
+                                            ? Colors.blue[50]
+                                            : Colors.grey[100]),
+                                  border: Border.all(
+                                    color: !editingQty
+                                        ? Colors.blue
+                                        : (Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? Colors.blueGrey[700]!
+                                              : Colors.grey.shade300),
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      "RATE (₹/$masterUnit)",
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      localRate,
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: allowedUnits
+                            .map(
+                              (u) => Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                child: ChoiceChip(
+                                  label: Text(
+                                    u,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  selected: currentUnit == u,
+                                  onSelected: (masterUnit == "PCS")
+                                      ? null
+                                      : (v) => setPopupState(
+                                          () => currentUnit = u,
+                                        ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 15),
+                      GridView.count(
+                        shrinkWrap: true,
+                        crossAxisCount: 3,
+                        childAspectRatio: 1.6,
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        children:
+                            [
+                                  "1",
+                                  "2",
+                                  "3",
+                                  "4",
+                                  "5",
+                                  "6",
+                                  "7",
+                                  "8",
+                                  "9",
+                                  ".",
+                                  "0",
+                                  "DEL",
+                                ]
+                                .map(
+                                  (e) => ElevatedButton(
+                                    onPressed: () => handleNumpad(e),
+                                    child: Text(
+                                      e,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blueGrey,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                      ),
+                      const SizedBox(height: 15),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: ((double.tryParse(localQty) ?? 0) == 0 || (double.tryParse(localRate) ?? 0) == 0) 
+                                ? Colors.grey[400] 
+                                : Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: ((double.tryParse(localQty) ?? 0) == 0 || (double.tryParse(localRate) ?? 0) == 0) 
+                              ? null 
+                              : submitEntry,
+                          child: Text(
+                            editCartIndex != null
+                                ? "UPDATE TO BILL"
+                                : "ADD TO BILL",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildCartWidget(
+    void Function(void Function()) setLocalState, {
+    bool isDialog = false,
+  }) {
+    double cartTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+    return Container(
+      padding: const EdgeInsets.all(15),
+      color: isDialog ? null : Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "CURRENT BILL (${_cart.length} Items)",
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              if (isDialog)
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+            ],
+          ),
+          const Divider(),
+          Expanded(
+            child: _cart.isEmpty
+                ? const Center(child: Text("Cart is Empty"))
+                : ListView.builder(
+                    itemCount: _cart.length,
+                    itemBuilder: (context, index) {
+                      final cartItem = _cart[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                flex: 8,
+                                child: InkWell(
+                                  onTap: () {
+                                    Map<String, String>? baseItemMatch;
+                                    globalInventory.forEach((cat, items) {
+                                      for (var item in items) {
+                                        String baseName = item['name'] ?? "";
+                                        String regName =
+                                            item['regional_name'] ?? "";
+                                        String testName = regName.isNotEmpty
+                                            ? "$baseName ($regName)"
+                                            : baseName;
+                                        if (testName == cartItem['name'] ||
+                                            baseName == cartItem['name'])
+                                          baseItemMatch = item;
+                                      }
+                                    });
+
+                                    baseItemMatch ??= {
+                                      'name': cartItem['name'],
+                                      'rate': cartItem['rate'],
+                                      'unit': cartItem['unit'],
+                                    };
+                                    if (isDialog) Navigator.pop(context);
+                                    _showItemEntryPopup(
+                                      baseItemMatch!,
+                                      editCartIndex: index,
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.blueGrey[800]
+                                          : Colors.blueGrey[50],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 28,
+                                          height: 28,
+                                          margin: const EdgeInsets.only(right: 8.0),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context).brightness == Brightness.dark 
+                                                ? Colors.blueGrey[600] 
+                                                : Colors.blueGrey[400],
+                                            shape: BoxShape.circle,
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            "${index + 1}",
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                cartItem['name'],
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                "${cartItem['qty']} ${cartItem['unit']} x ₹${cartItem['rate']}",
+                                                style: TextStyle(
+                                                  color: Theme.of(context).brightness == Brightness.dark
+                                                      ? Colors.grey[300]
+                                                      : Colors.grey[700],
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                flex: 2,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.red[900]!.withOpacity(0.4)
+                                        : Colors.red[100],
+
+                                    elevation: 0,
+                                  ),
+                                  onPressed: () async {
+                                    bool
+                                    confirm = await _showConfirmationWarning(
+                                      context,
+                                      "DO YOU REALLY WANT TO\nREMOVE THIS ITEM?",
+                                    );
+                                    if (confirm) {
+                                      setState(() => _cart.removeAt(index));
+                                      setLocalState(() {});
+                                    }
+                                  },
+                                  child: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          const Divider(),
+          Row(
+            children: [
+              Expanded(
+                flex: 8,
+                child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _cart.isEmpty
+                        ? null
+                        : () {
+                            if (isDialog) Navigator.pop(context);
+                            _showCustomerNamePopup();
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          Theme.of(context).brightness == Brightness.dark
+                          ? Colors.blueGrey[700]
+                          : Colors.blueGrey[900],
+                      foregroundColor: Colors.white,
+                    ),
+                    child: Text(
+                      "GENERATE BILL (₹${cartTotal.toStringAsFixed(2)})",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _cart.isEmpty
+                        ? null
+                        : () async {
+                            bool confirm = await _showConfirmationWarning(
+                              context,
+                              "DO YOU REALLY WANT TO\nCLEAR THE ENTIRE CART?",
+                            );
+                            if (confirm) {
+                              setState(() => _cart = []);
+                              if (isDialog && context.mounted)
+                                Navigator.pop(context);
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      elevation: 1,
+                    ),
+                    child: const Icon(Icons.delete_sweep, size: 28),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1387,224 +1956,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setCartState) {
-          double cartTotal = _cart.fold(0, (sum, item) => sum + item['total']);
-          return Dialog(
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "CURRENT BILL",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  Expanded(
-                    child: _cart.isEmpty
-                        ? const Center(child: Text("Cart is Empty"))
-                        : ListView.builder(
-                            itemCount: _cart.length,
-                            itemBuilder: (context, index) {
-                              final cartItem = _cart[index];
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: IntrinsicHeight(
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      Expanded(
-                                        flex: 8,
-                                        child: InkWell(
-                                          onTap: () {
-                                            Map<String, String>? baseItemMatch;
-                                            globalInventory.forEach((
-                                              cat,
-                                              items,
-                                            ) {
-                                              for (var item in items) {
-                                                String baseName =
-                                                    item['name'] ?? "";
-                                                String regName =
-                                                    item['regional_name'] ?? "";
-                                                String testName =
-                                                    regName.isNotEmpty
-                                                    ? "$baseName ($regName)"
-                                                    : baseName;
-                                                if (testName ==
-                                                        cartItem['name'] ||
-                                                    baseName ==
-                                                        cartItem['name'])
-                                                  baseItemMatch = item;
-                                              }
-                                            });
-
-                                            baseItemMatch ??= {
-                                              'name': cartItem['name'],
-                                              'rate': cartItem['rate'],
-                                              'unit': cartItem['unit'],
-                                            };
-                                            Navigator.pop(context);
-                                            _showItemEntryPopup(
-                                              baseItemMatch!,
-                                              editCartIndex: index,
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                              color: Theme.of(context).brightness == Brightness.dark
-                                                  ? Colors.blueGrey[800]
-                                                  : Colors.blueGrey[50],
-                                              borderRadius: BorderRadius.circular(16),
-                                            ),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Text(
-                                                  cartItem['name'],
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 15,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  "${cartItem['qty']} ${cartItem['unit']} x ₹${cartItem['rate']}",
-                                                  style: TextStyle(
-                                                    color:
-                                                        Theme.of(
-                                                              context,
-                                                            ).brightness ==
-                                                            Brightness.dark
-                                                        ? Colors.grey[300]
-                                                        : Colors.grey[700],
-                                                    fontSize: 13,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Expanded(
-                                        flex: 2,
-                                        child: ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                Theme.of(context).brightness ==
-                                                    Brightness.dark
-                                                ? Colors.red[900]!.withOpacity(
-                                                    0.4,
-                                                  )
-                                                : Colors.red[100],
-
-                                            elevation: 0,
-                                          ),
-                                          onPressed: () async {
-                                            bool confirm =
-                                                await _showConfirmationWarning(
-                                                  context,
-                                                  "DO YOU REALLY WANT TO\nREMOVE THIS ITEM?",
-                                                );
-                                            if (confirm) {
-                                              setState(
-                                                () => _cart.removeAt(index),
-                                              );
-                                              setCartState(() {});
-                                            }
-                                          },
-                                          child: const Icon(
-                                            Icons.delete,
-                                            color: Colors.red,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                  const Divider(),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 8,
-                        child: SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _cart.isEmpty
-                                ? null
-                                : () => _showCustomerNamePopup(),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.blueGrey[700]
-                                  : Colors.blueGrey[900],
-                              foregroundColor: Colors.white,
-                            ),
-                            child: Text(
-                              "GENERATE BILL (₹${cartTotal.toStringAsFixed(2)})",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: SizedBox(
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _cart.isEmpty
-                                ? null
-                                : () async {
-                                    bool
-                                    confirm = await _showConfirmationWarning(
-                                      context,
-                                      "DO YOU REALLY WANT TO\nCLEAR THE ENTIRE CART?",
-                                    );
-                                    if (confirm) {
-                                      setState(() => _cart = []);
-                                      if (context.mounted)
-                                        Navigator.pop(context);
-                                    }
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              elevation: 1,
-                            ),
-                            child: const Icon(Icons.delete_sweep, size: 28),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
+          return Dialog(child: _buildCartWidget(setCartState, isDialog: true));
         },
       ),
     );
@@ -1647,13 +1999,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ? "$baseName ($regName)"
                         : baseName;
                     return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: _searchResults[index]['color'] != null
                             ? parseHexColor(_searchResults[index]['color'])
                             : (Theme.of(context).brightness == Brightness.dark
-                                ? Colors.blueGrey[800]
-                                : Colors.blueGrey[50]),
+                                  ? Colors.blueGrey[800]
+                                  : Colors.blueGrey[50]),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: ListTile(
@@ -1701,11 +2056,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         itemCount: categories.length,
         shrinkWrap: true,
         physics: const BouncingScrollPhysics(),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.3,
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 130,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 1.1,
         ),
         itemBuilder: (context, index) {
           final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1713,9 +2068,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: globalCategoryColors[categories[index]] != null
                   ? parseHexColor(globalCategoryColors[categories[index]])
-                  : (isDark
-                      ? Colors.blueGrey[800]
-                      : Colors.blueGrey[50]),
+                  : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
               foregroundColor: globalCategoryColors[categories[index]] != null
                   ? Colors.black87
                   : (isDark ? Colors.white : Colors.blueGrey[900]),
@@ -1725,10 +2078,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             onPressed: () =>
                 setState(() => _selectedCategoryForGrid = categories[index]),
-            child: Text(
-              categories[index].toUpperCase(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (Platform.isWindows)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6.0),
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey[800],
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      "${index + 1}",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                Text(
+                  categories[index].toUpperCase(),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ],
             ),
           );
         },
@@ -1772,8 +2149,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     shrinkWrap: true,
                     physics: const BouncingScrollPhysics(),
                     gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 130,
                           mainAxisSpacing: 10,
                           crossAxisSpacing: 10,
                           childAspectRatio: 1.2,
@@ -1792,13 +2169,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           backgroundColor: item['color'] != null
                               ? parseHexColor(item['color'])
                               : (isDark
-                                  ? Colors.orange[900]!.withOpacity(0.3)
-                                  : Colors.orange[50]),
+                                    ? Colors.orange[900]!.withOpacity(0.3)
+                                    : Colors.orange[50]),
                           foregroundColor: item['color'] != null
                               ? Colors.black87
                               : (isDark
-                                  ? Colors.orange[100]
-                                  : Colors.blueGrey[900]),
+                                    ? Colors.orange[100]
+                                    : Colors.blueGrey[900]),
 
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                         ),
@@ -1806,6 +2183,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
+                            if (Platform.isWindows)
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 6.0),
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: Colors.blueGrey[800],
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  "${index + 1}",
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
                             Text(
                               displayString,
                               textAlign: TextAlign.center,
@@ -1823,8 +2219,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 color: item['color'] != null
                                     ? Colors.black87
                                     : (isDark
-                                        ? Colors.orange[200]
-                                        : Colors.blueGrey[600]),
+                                          ? Colors.orange[200]
+                                          : Colors.blueGrey[600]),
                                 fontSize: 11,
                               ),
                             ),
@@ -1857,11 +2253,189 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Widget _buildMobileAppView(bool showBottomBar, double totalBill) {
+    return GestureDetector(
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        _homeFocusNode.requestFocus();
+      },
+      behavior: HitTestBehavior.translucent,
+      child: Column(
+        children: [
+          Expanded(child: _buildMiddleLayout()),
+        if (showBottomBar)
+          Container(
+            height: 75,
+            color: Colors.blueGrey[900],
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 4,
+                  child: InkWell(
+                    onTap: _showCart,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Badge(
+                          label: Text(
+                            _cart.length.toString(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          backgroundColor: Colors.red,
+                          isLabelVisible: _cart.isNotEmpty,
+                          child: const Icon(
+                            Icons.shopping_cart,
+                            color: Colors.white,
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          "CART",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 6,
+                  child: Center(
+                    child: Text(
+                      "TOTAL: ₹${totalBill.toStringAsFixed(2)}",
+                      style: const TextStyle(
+                        color: Colors.greenAccent,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (!Platform.isWindows) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (FocusManager.instance.primaryFocus != _homeFocusNode) {
+      return KeyEventResult.ignored;
+    }
+
+    final key = event.logicalKey;
+    final isShift = HardwareKeyboard.instance.isShiftPressed;
+
+    if (key == LogicalKeyboardKey.backspace) {
+      if (_selectedCategoryForGrid != null) {
+        setState(() => _selectedCategoryForGrid = null);
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+      if (isShift && _cart.isNotEmpty) {
+        _showCustomerNamePopup();
+        return KeyEventResult.handled;
+      }
+    }
+
+    String char = event.character ?? '';
+    if (key.keyId >= LogicalKeyboardKey.digit0.keyId && key.keyId <= LogicalKeyboardKey.digit9.keyId) {
+      char = (key.keyId - LogicalKeyboardKey.digit0.keyId).toString();
+    } else if (key.keyId >= LogicalKeyboardKey.numpad0.keyId && key.keyId <= LogicalKeyboardKey.numpad9.keyId) {
+      char = (key.keyId - LogicalKeyboardKey.numpad0.keyId).toString();
+    }
+
+    if (char.isNotEmpty && RegExp(r'^[0-9]$').hasMatch(char)) {
+      if (isShift) {
+        _isEditComboMode = true;
+      }
+      _keyBuffer += char;
+      _triggerDebounce();
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _triggerDebounce() {
+    _keyDebounceTimer?.cancel();
+    _keyDebounceTimer = Timer(const Duration(milliseconds: 500), _executeShortcut);
+  }
+
+  void _executeShortcut() {
+    if (!mounted) return;
+    if (_keyBuffer.isEmpty) {
+      _isEditComboMode = false;
+      return;
+    }
+
+    int index = int.tryParse(_keyBuffer) ?? 0;
+    _keyBuffer = "";
+    bool editMode = _isEditComboMode;
+    _isEditComboMode = false;
+
+    if (index == 0) return;
+
+    if (editMode) {
+      if (index <= _cart.length) {
+        var cartItem = _cart[index - 1];
+        Map<String, String>? baseItemMatch;
+        globalInventory.forEach((cat, itemsList) {
+          for (var item in itemsList) {
+            String baseName = item['name'] ?? "";
+            String regName = item['regional_name'] ?? "";
+            String testName = regName.isNotEmpty ? "$baseName ($regName)" : baseName;
+            if (testName == cartItem['name'] || baseName == cartItem['name']) {
+              baseItemMatch = item;
+            }
+          }
+        });
+        baseItemMatch ??= {
+          'name': cartItem['name'].toString(),
+          'rate': cartItem['rate'].toString(),
+          'unit': cartItem['unit'].toString(),
+        };
+        _showItemEntryPopup(baseItemMatch!, editCartIndex: index - 1);
+      }
+    } else {
+      if (_selectedCategoryForGrid == null) {
+        List<String> categories = globalInventory.keys.toList();
+        if (index <= categories.length) {
+          setState(() {
+            _selectedCategoryForGrid = categories[index - 1];
+          });
+        }
+      } else {
+        List<Map<String, String>> categoryItems = globalInventory[_selectedCategoryForGrid!] ?? [];
+        if (index <= categoryItems.length) {
+          _showItemEntryPopup(categoryItems[index - 1]);
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     double totalBill = _cart.fold(0, (sum, item) => sum + item['total']);
-    return Scaffold(
-      appBar: AppBar(
+    return Focus(
+      autofocus: true,
+      focusNode: _homeFocusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        appBar: AppBar(
         backgroundColor: Colors.blueGrey[900],
         centerTitle: true,
         leading: IconButton(
@@ -1887,68 +2461,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: _isLoadingDb
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : Platform.isWindows
+          ? Row(
               children: [
-                Expanded(child: _buildMiddleLayout()),
-                Container(
-                  height: 75,
-                  color: Colors.blueGrey[900],
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: InkWell(
-                          onTap: _showCart,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Badge(
-                                label: Text(
-                                  _cart.length.toString(),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                backgroundColor: Colors.red,
-                                isLabelVisible: _cart.isNotEmpty,
-                                child: const Icon(
-                                  Icons.shopping_cart,
-                                  color: Colors.white,
-                                  size: 26,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                "CART",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 6,
-                        child: Center(
-                          child: Text(
-                            "TOTAL: ₹${totalBill.toStringAsFixed(2)}",
-                            style: const TextStyle(
-                              color: Colors.greenAccent,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                Expanded(flex: 3, child: _buildMobileAppView(false, totalBill)),
+                Container(width: 1, color: Colors.grey.withOpacity(0.5)),
+                Expanded(
+                  flex: 2,
+                  child: _buildCartWidget(setState, isDialog: false),
                 ),
               ],
-            ),
+            )
+          : _buildMobileAppView(true, totalBill),
+      ),
     );
   }
 }
@@ -2062,52 +2587,78 @@ class _SetupScreenState extends State<SetupScreen> {
     bool shareSettings,
   ) async {
     try {
-      final backupUri = await LocalDatabase.getBackupsFolderUri();
-      if (backupUri == null) return;
-
       List<XFile> filesToShare = [];
       final tempDir = Directory.systemTemp;
 
-      if (shareInventory) {
-        var invFile = await saf.child(backupUri, 'inventory_data.json');
-        final content = jsonEncode(globalInventory);
-        final bytes = Uint8List.fromList(utf8.encode(content));
-        if (invFile == null) {
-          await saf.createFileAsBytes(
-            backupUri,
-            mimeType: 'application/json',
-            displayName: 'inventory_data.json',
-            bytes: bytes,
-          );
-        } else {
-          await saf.writeToFileAsBytes(invFile.uri, bytes: bytes);
-        }
-        final tempInv = File("${tempDir.path}/inventory_data.json");
-        await tempInv.writeAsBytes(bytes);
-        filesToShare.add(XFile(tempInv.path));
-      }
+      if (Platform.isWindows) {
+        String baseDir = File(Platform.resolvedExecutable).parent.path;
+        String dir = "$baseDir\\Billing APP\\INVENTORY BACKUPS";
+        Directory(dir).createSync(recursive: true);
 
-      if (shareSettings) {
-        var setFile = await saf.child(backupUri, 'app_settings.json');
-        final content = jsonEncode({
-          "layout": currentLayoutSetting,
-          "shopName": globalShopName,
-          "theme": currentThemeSetting,
-        });
-        final bytes = Uint8List.fromList(utf8.encode(content));
-        if (setFile == null) {
-          await saf.createFileAsBytes(
-            backupUri,
-            mimeType: 'application/json',
-            displayName: 'app_settings.json',
-            bytes: bytes,
-          );
-        } else {
-          await saf.writeToFileAsBytes(setFile.uri, bytes: bytes);
+        if (shareInventory) {
+          final content = jsonEncode(globalInventory);
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          File invFile = File("$dir\\inventory_data.json");
+          await invFile.writeAsBytes(bytes);
+          filesToShare.add(XFile(invFile.path));
         }
-        final tempSet = File("${tempDir.path}/app_settings.json");
-        await tempSet.writeAsBytes(bytes);
-        filesToShare.add(XFile(tempSet.path));
+
+        if (shareSettings) {
+          final content = jsonEncode({
+            "layout": currentLayoutSetting,
+            "shopName": globalShopName,
+            "theme": currentThemeSetting,
+          });
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          File setFile = File("$dir\\app_settings.json");
+          await setFile.writeAsBytes(bytes);
+          filesToShare.add(XFile(setFile.path));
+        }
+      } else {
+        final backupUri = await LocalDatabase.getBackupsFolderUri();
+        if (backupUri == null) return;
+
+        if (shareInventory) {
+          var invFile = await saf.child(backupUri, 'inventory_data.json');
+          final content = jsonEncode(globalInventory);
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          if (invFile == null) {
+            await saf.createFileAsBytes(
+              backupUri,
+              mimeType: 'application/json',
+              displayName: 'inventory_data.json',
+              bytes: bytes,
+            );
+          } else {
+            await saf.writeToFileAsBytes(invFile.uri, bytes: bytes);
+          }
+          final tempInv = File("${tempDir.path}/inventory_data.json");
+          await tempInv.writeAsBytes(bytes);
+          filesToShare.add(XFile(tempInv.path));
+        }
+
+        if (shareSettings) {
+          var setFile = await saf.child(backupUri, 'app_settings.json');
+          final content = jsonEncode({
+            "layout": currentLayoutSetting,
+            "shopName": globalShopName,
+            "theme": currentThemeSetting,
+          });
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          if (setFile == null) {
+            await saf.createFileAsBytes(
+              backupUri,
+              mimeType: 'application/json',
+              displayName: 'app_settings.json',
+              bytes: bytes,
+            );
+          } else {
+            await saf.writeToFileAsBytes(setFile.uri, bytes: bytes);
+          }
+          final tempSet = File("${tempDir.path}/app_settings.json");
+          await tempSet.writeAsBytes(bytes);
+          filesToShare.add(XFile(tempSet.path));
+        }
       }
 
       if (filesToShare.isNotEmpty) {
@@ -2127,18 +2678,17 @@ class _SetupScreenState extends State<SetupScreen> {
     bool importSettings,
   ) async {
     try {
-      final backupUri = await LocalDatabase.getBackupsFolderUri();
-      if (backupUri == null) return;
-
       bool inventorySuccess = false;
       bool settingsSuccess = false;
 
-      if (importInventory) {
-        var invFile = await saf.child(backupUri, 'inventory_data.json');
-        if (invFile != null) {
-          final bytes = await saf.getDocumentContent(invFile.uri);
-          if (bytes != null) {
-            final content = utf8.decode(bytes);
+      if (Platform.isWindows) {
+        String baseDir = File(Platform.resolvedExecutable).parent.path;
+        String dir = "$baseDir\\Billing APP\\INVENTORY BACKUPS";
+
+        if (importInventory) {
+          File invFile = File("$dir\\inventory_data.json");
+          if (invFile.existsSync()) {
+            final content = await invFile.readAsString();
             Map<String, dynamic> decoded = jsonDecode(content);
             Map<String, List<Map<String, String>>> verifiedInventory = {};
             decoded.forEach((key, value) {
@@ -2149,35 +2699,87 @@ class _SetupScreenState extends State<SetupScreen> {
             globalInventory = verifiedInventory;
             await LocalDatabase.saveToDisk();
             inventorySuccess = true;
+          } else {
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Inventory backup file not found."),
+                ),
+              );
           }
-        } else {
-          if (mounted)
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Inventory backup file not found.")),
-            );
         }
-      }
 
-      if (importSettings) {
-        var setFile = await saf.child(backupUri, 'app_settings.json');
-        if (setFile != null) {
-          final bytes = await saf.getDocumentContent(setFile.uri);
-          if (bytes != null) {
-            final content = utf8.decode(bytes);
+        if (importSettings) {
+          File setFile = File("$dir\\app_settings.json");
+          if (setFile.existsSync()) {
+            final content = await setFile.readAsString();
             Map<String, dynamic> decoded = jsonDecode(content);
             currentLayoutSetting = decoded["layout"] ?? "HL";
             globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
             currentThemeSetting = decoded["theme"] ?? "LIGHT";
             await LocalDatabase.saveAppSettings();
             settingsSuccess = true;
+          } else {
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("App settings backup file not found."),
+                ),
+              );
           }
-        } else {
-          if (mounted)
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("App settings backup file not found."),
-              ),
-            );
+        }
+      } else {
+        final backupUri = await LocalDatabase.getBackupsFolderUri();
+        if (backupUri == null) return;
+
+        if (importInventory) {
+          var invFile = await saf.child(backupUri, 'inventory_data.json');
+          if (invFile != null) {
+            final bytes = await saf.getDocumentContent(invFile.uri);
+            if (bytes != null) {
+              final content = utf8.decode(bytes);
+              Map<String, dynamic> decoded = jsonDecode(content);
+              Map<String, List<Map<String, String>>> verifiedInventory = {};
+              decoded.forEach((key, value) {
+                verifiedInventory[key] = (value as List)
+                    .map((item) => Map<String, String>.from(item))
+                    .toList();
+              });
+              globalInventory = verifiedInventory;
+              await LocalDatabase.saveToDisk();
+              inventorySuccess = true;
+            }
+          } else {
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Inventory backup file not found."),
+                ),
+              );
+          }
+        }
+
+        if (importSettings) {
+          var setFile = await saf.child(backupUri, 'app_settings.json');
+          if (setFile != null) {
+            final bytes = await saf.getDocumentContent(setFile.uri);
+            if (bytes != null) {
+              final content = utf8.decode(bytes);
+              Map<String, dynamic> decoded = jsonDecode(content);
+              currentLayoutSetting = decoded["layout"] ?? "HL";
+              globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
+              currentThemeSetting = decoded["theme"] ?? "LIGHT";
+              await LocalDatabase.saveAppSettings();
+              settingsSuccess = true;
+            }
+          } else {
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("App settings backup file not found."),
+                ),
+              );
+          }
         }
       }
 
@@ -2537,8 +3139,10 @@ class _SetupScreenState extends State<SetupScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setPopupState) {
           return Dialog(
-            child: SingleChildScrollView(
-              child: Padding(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: SingleChildScrollView(
+                child: Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -2770,6 +3374,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   ],
                 ),
               ),
+            ),
             ),
           );
         },
@@ -3080,8 +3685,8 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  List<saf.DocumentFile> _allPdfFiles = [];
-  List<saf.DocumentFile> _filteredPdfFiles = [];
+  List<dynamic> _allPdfFiles = [];
+  List<dynamic> _filteredPdfFiles = [];
   final TextEditingController _historySearchController =
       TextEditingController();
 
@@ -3092,6 +3697,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _loadHistory() async {
+    if (Platform.isWindows) {
+      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String dir = "$baseDir\\Billing APP\\MYBILLS";
+      Directory myBillsDir = Directory(dir);
+      if (myBillsDir.existsSync()) {
+        List<File> loadedFiles = myBillsDir
+            .listSync()
+            .where((e) => e is File && e.path.endsWith('.pdf'))
+            .map((e) => e as File)
+            .toList();
+
+        loadedFiles.sort((a, b) {
+          final aDate = a.lastModifiedSync();
+          final bDate = b.lastModifiedSync();
+          return bDate.compareTo(aDate);
+        });
+
+        setState(() {
+          _allPdfFiles = loadedFiles;
+          _filteredPdfFiles = loadedFiles;
+        });
+      }
+      return;
+    }
+
     final uri = await LocalDatabase.getMyBillsFolderUri();
     if (uri != null) {
       final stream = saf.listFiles(
@@ -3132,9 +3762,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
     setState(() {
       _filteredPdfFiles = _allPdfFiles.where((file) {
-        String printableName = _parseInvoiceNameForDisplay(
-          file.name ?? "",
-        ).toLowerCase();
+        String name = file is File
+            ? file.path.split(Platform.pathSeparator).last
+            : (file as saf.DocumentFile).name ?? "";
+        String printableName = _parseInvoiceNameForDisplay(name).toLowerCase();
         return printableName.contains(query.toLowerCase());
       }).toList();
     });
@@ -3244,14 +3875,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                       onTap: () async {
                                         try {
-                                          final bytes = await saf
-                                              .getDocumentContent(file.uri);
-                                          if (bytes != null) {
-                                            final tempFile = File(
-                                              '${Directory.systemTemp.path}/${file.name}',
-                                            );
-                                            await tempFile.writeAsBytes(bytes);
-                                            OpenFilex.open(tempFile.path);
+                                          if (file is File) {
+                                            OpenFilex.open(file.path);
+                                          } else {
+                                            final safFile =
+                                                file as saf.DocumentFile;
+                                            final bytes = await saf
+                                                .getDocumentContent(
+                                                  safFile.uri,
+                                                );
+                                            if (bytes != null) {
+                                              final tempFile = File(
+                                                '${Directory.systemTemp.path}/${safFile.name}',
+                                              );
+                                              await tempFile.writeAsBytes(
+                                                bytes,
+                                              );
+                                              OpenFilex.open(tempFile.path);
+                                            }
                                           }
                                         } catch (e) {
                                           debugPrint("Error opening file: $e");
@@ -3270,7 +3911,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                             Expanded(
                                               child: Text(
                                                 _parseInvoiceNameForDisplay(
-                                                  file.name ?? "Unknown",
+                                                  file is File
+                                                      ? file.path
+                                                            .split(
+                                                              Platform
+                                                                  .pathSeparator,
+                                                            )
+                                                            .last
+                                                      : (file as saf.DocumentFile)
+                                                                .name ??
+                                                            "Unknown",
                                                 ),
                                                 style: TextStyle(
                                                   fontWeight: FontWeight.w600,
@@ -3304,16 +3954,28 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       borderRadius: BorderRadius.circular(16),
                                       onTap: () async {
                                         try {
-                                          final bytes = await saf
-                                              .getDocumentContent(file.uri);
-                                          if (bytes != null) {
-                                            final tempFile = File(
-                                              '${Directory.systemTemp.path}/${file.name}',
-                                            );
-                                            await tempFile.writeAsBytes(bytes);
+                                          if (file is File) {
                                             Share.shareXFiles([
-                                              XFile(tempFile.path),
+                                              XFile(file.path),
                                             ], text: 'Invoice Sharing');
+                                          } else {
+                                            final safFile =
+                                                file as saf.DocumentFile;
+                                            final bytes = await saf
+                                                .getDocumentContent(
+                                                  safFile.uri,
+                                                );
+                                            if (bytes != null) {
+                                              final tempFile = File(
+                                                '${Directory.systemTemp.path}/${safFile.name}',
+                                              );
+                                              await tempFile.writeAsBytes(
+                                                bytes,
+                                              );
+                                              Share.shareXFiles([
+                                                XFile(tempFile.path),
+                                              ], text: 'Invoice Sharing');
+                                            }
                                           }
                                         } catch (e) {
                                           debugPrint("Error sharing file: $e");
@@ -3382,8 +4044,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => Dialog(
-            child: Container(
-              padding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Container(
+                padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -3443,6 +4107,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                 ],
               ),
             ),
+            ),
           ),
         ) ??
         false;
@@ -3497,7 +4162,10 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     onPressed: _catC.text.trim().isEmpty
                         ? null
                         : () async {
-                            String? color = await showColorPickerDialog(context, null);
+                            String? color = await showColorPickerDialog(
+                              context,
+                              null,
+                            );
                             if (color != null) {
                               String catName = _catC.text.trim();
                               if (catName.isNotEmpty) {
@@ -3556,10 +4224,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             alignment: Alignment.centerLeft,
-                            backgroundColor: globalCategoryColors[names[i]] != null
+                            backgroundColor:
+                                globalCategoryColors[names[i]] != null
                                 ? parseHexColor(globalCategoryColors[names[i]])
                                 : null,
-                            foregroundColor: globalCategoryColors[names[i]] != null
+                            foregroundColor:
+                                globalCategoryColors[names[i]] != null
                                 ? Colors.black87
                                 : null,
                           ),
@@ -3576,12 +4246,36 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       const SizedBox(width: 5),
                       GestureDetector(
                         onTap: () async {
+                          String oldName = names[i];
+                          TextEditingController nameCtrl = TextEditingController(text: oldName);
                           String? newColor = await showColorPickerDialog(
-                              context, globalCategoryColors[names[i]],
-                              isEditing: true);
+                            context,
+                            globalCategoryColors[oldName],
+                            isEditing: true,
+                            categoryNameController: nameCtrl,
+                          );
                           if (newColor != null) {
                             setState(() {
-                              globalCategoryColors[names[i]] = newColor;
+                              String newName = nameCtrl.text.trim();
+                              if (newName.isNotEmpty && newName != oldName) {
+                                if (!globalInventory.containsKey(newName)) {
+                                  Map<String, List<Map<String, String>>> newInventory = {};
+                                  for (String key in globalInventory.keys) {
+                                    if (key == oldName) {
+                                      newInventory[newName] = globalInventory[oldName] ?? [];
+                                    } else {
+                                      newInventory[key] = globalInventory[key]!;
+                                    }
+                                  }
+                                  globalInventory = newInventory;
+                                  globalCategoryColors[newName] = newColor;
+                                  globalCategoryColors.remove(oldName);
+                                } else {
+                                  globalCategoryColors[oldName] = newColor;
+                                }
+                              } else {
+                                globalCategoryColors[oldName] = newColor;
+                              }
                             });
                             await LocalDatabase.saveToDisk();
                           }
@@ -3590,13 +4284,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                           width: 36,
                           height: 36,
                           decoration: BoxDecoration(
-                            color: parseHexColor(globalCategoryColors[names[i]]),
+                            color: parseHexColor(
+                              globalCategoryColors[names[i]],
+                            ),
                             shape: BoxShape.circle,
                             border: Border.all(
-                                color: Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.white54
-                                    : Colors.black26,
-                                width: 1.5),
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.white54
+                                  : Colors.black26,
+                              width: 1.5,
+                            ),
                           ),
                         ),
                       ),
@@ -3661,8 +4360,10 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => Dialog(
-            child: Container(
-              padding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Container(
+                padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -3721,6 +4422,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                   ),
                 ],
               ),
+            ),
             ),
           ),
         ) ??
@@ -3922,7 +4624,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           : () async {
                               var data = {
                                 'name': _englishNameController.text.trim(),
-                                'regional_name': _regionalNameController.text.trim(),
+                                'regional_name': _regionalNameController.text
+                                    .trim(),
                                 'rate': _r.text.trim(),
                                 'unit': _selectedUnit!,
                                 'color': _selectedColor,
@@ -4004,8 +4707,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           ),
                         ),
                         Expanded(
-                          flex: 8,
-                          child: InkWell(
+                          child: IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(
+                                  flex: 8,
+                                  child: InkWell(
                             onTap: () {
                               setState(() {
                                 _editingIndex = i;
@@ -4015,17 +4723,19 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                     items[i]['regional_name'] ?? "";
                                 _r.text = items[i]['rate'] ?? "";
                                 _selectedUnit = items[i]['unit']!;
-                                _selectedColor = items[i]['color'] ?? presetColors.first;
+                                _selectedColor =
+                                    items[i]['color'] ?? presetColors.first;
                               });
                             },
                             child: Container(
+                              width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isEditing
                                     ? (isDark
                                           ? Colors.orange[900]!.withOpacity(0.3)
                                           : Colors.orange[50])
-                                    : (items[i]['color'] != null 
+                                    : (items[i]['color'] != null
                                           ? parseHexColor(items[i]['color'])
                                           : (isDark
                                                 ? Colors.blueGrey[800]
@@ -4097,7 +4807,11 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                         ),
                       ],
                     ),
-                  );
+                  ),
+                ),
+              ],
+            ),
+          );
                 },
               ),
             ),

@@ -49,11 +49,14 @@ dependencies:
   saf: ^1.0.4
   shared_storage: ^0.8.1
   shared_preferences: ^2.5.5
+  window_manager: ^0.5.1
+  google_sign_in_dartio: ^0.3.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: "^0.13.1"
+  image: ^4.8.0
 
 flutter_launcher_icons:
   android: "ic_launcher"
