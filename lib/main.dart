@@ -158,6 +158,7 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
 
 // --- GLOBAL DATA ---
 Map<String, List<Map<String, String>>> globalInventory = {};
+List<Map<String, dynamic>> globalParties = [];
 Map<String, String> globalCategoryColors = {};
 String currentLayoutSetting = "HL";
 String globalShopName = "RETAIL INVOICE";
@@ -366,6 +367,57 @@ class LocalDatabase {
       return doc?.uri;
     }
     return folder.uri;
+  }
+
+  static Future<void> savePartiesToDisk() async {
+    try {
+      final content = jsonEncode(globalParties);
+      if (Platform.isWindows) {
+        String dir = _getWindowsSettingsDir();
+        if (!Directory(dir).existsSync()) {
+          Directory(dir).createSync(recursive: true);
+        }
+        await File("$dir\\party_details.json").writeAsString(content);
+      } else {
+        final settingsUri = await getSettingsFolderUri();
+        if (settingsUri == null) return;
+        var file = await saf.child(settingsUri, 'party_details.json');
+        if (file == null) {
+          await saf.createFileAsString(settingsUri, mimeType: "application/json", displayName: "party_details.json", content: content);
+        } else {
+          await saf.writeToFileAsString(file.uri, content: content, mode: FileMode.write);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error saving parties: $e");
+    }
+  }
+
+  static Future<void> loadPartiesFromDisk() async {
+    try {
+      String? content;
+      if (Platform.isWindows) {
+        String fileStr = "${_getWindowsSettingsDir()}\\party_details.json";
+        if (File(fileStr).existsSync()) {
+          content = await File(fileStr).readAsString();
+        }
+      } else {
+        final settingsUri = await getSettingsFolderUri();
+        if (settingsUri == null) return;
+        var file = await saf.child(settingsUri, 'party_details.json');
+        if (file != null) {
+          final bytes = await saf.getDocumentContent(file.uri);
+          if (bytes != null) content = utf8.decode(bytes);
+        }
+      }
+
+      if (content != null) {
+        List<dynamic> decoded = jsonDecode(content);
+        globalParties = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      }
+    } catch (e) {
+      debugPrint("Error loading parties: $e");
+    }
   }
 
   static Future<void> saveToDisk() async {
@@ -771,6 +823,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     await LocalDatabase.loadFromDisk();
+    await LocalDatabase.loadPartiesFromDisk();
     await LocalDatabase.loadAppSettings();
 
     try {
@@ -3638,6 +3691,31 @@ class WarehouseScreen extends StatelessWidget {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
+                    builder: (context) => const LedgerScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.account_balance_wallet),
+                label: const Text("ACCOUNTING"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                      ? Colors.blueGrey[800]
+                      : Colors.blueGrey[50],
+                  foregroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.blueGrey[900],
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            SizedBox(
+              width: double.infinity,
+              height: 60,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
                     builder: (context) => const HistoryScreen(),
                   ),
                 ),
@@ -4198,7 +4276,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         index: i,
                         child: const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 4.0),
-                          child: Icon(Icons.menu, color: Colors.blueGrey),
+                          child: Icon(Icons.menu, color: Colors.orange),
                         ),
                       ),
                       Container(
@@ -4681,7 +4759,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                           index: i,
                           child: const Padding(
                             padding: EdgeInsets.symmetric(horizontal: 4.0),
-                            child: Icon(Icons.menu, color: Colors.blueGrey),
+                            child: Icon(Icons.menu, color: Colors.orange),
                           ),
                         ),
                         Container(
@@ -4817,6 +4895,1086 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// --- LEDGER SCREEN ---
+class LedgerScreen extends StatefulWidget {
+  const LedgerScreen({super.key});
+  @override
+  State<LedgerScreen> createState() => _LedgerScreenState();
+}
+
+class _LedgerScreenState extends State<LedgerScreen> {
+  String _searchQuery = "";
+
+  void _onReorderParties(int oldIndex, int newIndex) {
+    if (_searchQuery.isNotEmpty) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    setState(() {
+      final item = globalParties.removeAt(oldIndex);
+      globalParties.insert(newIndex, item);
+    });
+    LocalDatabase.savePartiesToDisk();
+  }
+
+  Future<bool> _showWarning(String msg) async {
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => Dialog(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 15),
+                    Text(
+                      msg,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 45,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.grey[500],
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text(
+                                "CANCEL",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: 45,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text(
+                                "DELETE",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ) ??
+        false;
+  }
+
+  void _showPartyConfigurationPopup() {
+    final nameController = TextEditingController();
+    final dateController = TextEditingController();
+    final balanceController = TextEditingController();
+    bool isDebit = true;
+    final messenger = ScaffoldMessenger.of(context);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final RegExp dateRegExp = RegExp(r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$');
+            
+            bool isDateValid = dateRegExp.hasMatch(dateController.text.trim());
+            bool isNameValid = nameController.text.trim().isNotEmpty;
+            bool isBalanceValid = balanceController.text.trim().isNotEmpty;
+            bool allValid = isDateValid && isNameValid && isBalanceValid;
+
+            void checkFields() {
+              setDialogState(() {});
+            }
+
+            return Dialog(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+                child: Padding(
+                  padding: const EdgeInsets.all(15.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "PARTY CONFIGURATION",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      TextField(
+                        controller: nameController,
+                        onChanged: (_) => checkFields(),
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(hintText: "Name of Party"),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: dateController,
+                        onChanged: (_) => checkFields(),
+                        keyboardType: TextInputType.datetime,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                        ],
+                        decoration: const InputDecoration(hintText: "OPENING DATE (DD-MM-YYYY)"),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: balanceController,
+                        onChanged: (_) => checkFields(),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                        ],
+                        decoration: const InputDecoration(hintText: "OPENING BALANCE"),
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isDebit ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800]) : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
+                                  foregroundColor: isDebit ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white : Colors.blueGrey[900]),
+                                  elevation: isDebit ? 2 : 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: BorderSide(color: isDebit ? Colors.transparent : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200)),
+                                  ),
+                                ),
+                                onPressed: () => setDialogState(() => isDebit = true),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text("DEBIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
+                                    if (isDebit) ...[const SizedBox(width: 4), Icon(Icons.check, size: 12, color: isDark ? Colors.black : Colors.white)],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: !isDebit ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800]) : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
+                                  foregroundColor: !isDebit ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white : Colors.blueGrey[900]),
+                                  elevation: !isDebit ? 2 : 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: BorderSide(color: !isDebit ? Colors.transparent : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200)),
+                                  ),
+                                ),
+                                onPressed: () => setDialogState(() => isDebit = false),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Text("CREDIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
+                                    if (!isDebit) ...[const SizedBox(width: 4), Icon(Icons.check, size: 12, color: isDark ? Colors.black : Colors.white)],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: allValid ? Colors.green : Colors.grey.withOpacity(0.5),
+                                  foregroundColor: allValid ? Colors.white : Colors.white70,
+                                ),
+                                onPressed: !allValid ? null : () {
+                                  setState(() {
+                                    globalParties.add({
+                                      'name': nameController.text.trim(),
+                                      'opening_date': dateController.text.trim(),
+                                      'opening_balance': double.tryParse(balanceController.text.trim()) ?? 0.0,
+                                      'opening_type': isDebit ? 'debit' : 'credit',
+                                    });
+                                  });
+                                  LocalDatabase.savePartiesToDisk();
+
+                                  nameController.clear();
+                                  dateController.clear();
+                                  balanceController.clear();
+                                  checkFields();
+
+                                  messenger.showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Party added successfully!"),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                },
+                                child: const Text(
+                                  "ADD PARTY",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () {
+                                  if (allValid) {
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => AlertDialog(
+                                        title: const Text("Warning"),
+                                        content: const Text("You have un-saved party details filled in. Are you sure you want to close?"),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.pop(context),
+                                            child: const Text("NO"),
+                                          ),
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.pop(context); // close warning
+                                              Navigator.pop(context); // close party popup
+                                            },
+                                            child: const Text("YES, CLOSE", style: TextStyle(color: Colors.red)),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  } else {
+                                    Navigator.pop(context);
+                                  }
+                                },
+                                child: const Text(
+                                  "CLOSE",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    List<Map<String, dynamic>> filteredParties = globalParties.where((p) {
+      final pName = (p['name'] ?? "").toString().toLowerCase();
+      return pName.contains(_searchQuery);
+    }).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.blueGrey[800],
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "PARTIES",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    onPressed: _showPartyConfigurationPopup,
+                    icon: const Icon(Icons.add_circle),
+                    label: const Text(
+                      "ADD PARTY",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  onChanged: (val) {
+                    setState(() {
+                      _searchQuery = val.toLowerCase();
+                    });
+                  },
+                  decoration: InputDecoration(
+                    hintText: "Search Parties...",
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.blueGrey[800]
+                        : Colors.blueGrey[50],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (globalParties.isNotEmpty) const Divider(height: 1, thickness: 1),
+          Expanded(
+            child: filteredParties.isEmpty
+                ? Center(
+                    child: Text(_searchQuery.isNotEmpty 
+                        ? "No parties match your search." 
+                        : "No parties found. Click ADD PARTY above."),
+                  )
+                : ReorderableListView.builder(
+                    buildDefaultDragHandles: false,
+              itemCount: filteredParties.length,
+              onReorder: _onReorderParties,
+              itemBuilder: (context, i) {
+                final party = filteredParties[i];
+                final pName = party['name'] ?? "Unknown";
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                
+                // Find original global index for display if needed, but we can just use `i` for visual list rank, or global rank.
+                // It makes sense to display the global rank number even when searching.
+                final globalIndex = globalParties.indexOf(party);
+                
+                return Padding(
+                  key: ValueKey("party_row_${globalIndex}_$pName"),
+                  padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          _searchQuery.isNotEmpty 
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                  child: Icon(Icons.menu, color: Colors.grey),
+                                )
+                              : ReorderableDragStartListener(
+                                  index: i,
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 4.0),
+                                    child: Icon(Icons.menu, color: Colors.orange),
+                                  ),
+                                ),
+                          Container(
+                            margin: const EdgeInsets.only(right: 8.0, left: 4.0),
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[200],
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              "${globalIndex + 1}",
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.blueGrey[900],
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 8,
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PartyLedgerScreen(partyIndex: globalIndex),
+                                  ),
+                                ).then((_) => setState(() {}));
+                              },
+                              child: Container(
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                alignment: Alignment.centerLeft,
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                child: Text(
+                                  pName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: SizedBox(
+                              height: 48,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  backgroundColor: isDark
+                                      ? Colors.red[900]!.withOpacity(0.4)
+                                      : Colors.red[100],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                onPressed: () async {
+                                  bool confirm = await _showWarning(
+                                    "Are you sure you want to delete '$pName'? This action cannot be undone.",
+                                  );
+                                  if (confirm) {
+                                    setState(() {
+                                      globalParties.remove(party);
+                                    });
+                                    await LocalDatabase.savePartiesToDisk();
+                                  }
+                                },
+                                child: const Icon(Icons.delete, color: Colors.red),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(height: 1, thickness: 1),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- PARTY LEDGER SCREEN ---
+class PartyLedgerScreen extends StatefulWidget {
+  final int partyIndex;
+
+  const PartyLedgerScreen({super.key, required this.partyIndex});
+
+  @override
+  State<PartyLedgerScreen> createState() => _PartyLedgerScreenState();
+}
+
+class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
+  final _amountCtrl = TextEditingController();
+  final _dateCtrl = TextEditingController();
+  bool _isDebit = true; // true = DEBIT, false = CREDIT
+
+  int _viewMonth = DateTime.now().month;
+  int _viewYear = DateTime.now().year;
+
+  bool _isCustomMode = false;
+  DateTime? _customFrom;
+  DateTime? _customTo;
+
+  static const _months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+  Widget _buildToggleBtn(String label, bool isSelected) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      height: 45,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          backgroundColor: isSelected
+              ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800])
+              : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
+          foregroundColor: isSelected
+              ? (isDark ? Colors.black : Colors.white)
+              : (isDark ? Colors.white : Colors.blueGrey[900]),
+          elevation: isSelected ? 2 : 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: isSelected
+                  ? Colors.transparent
+                  : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200),
+            ),
+          ),
+        ),
+        onPressed: () => setState(() => _isDebit = label == "DEBIT"),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: label == "CREDIT" ? 8 : 9,
+              ),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 1),
+              Icon(Icons.check, size: 10, color: isDark ? Colors.black : Colors.white),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  DateTime? _parseDate(String dateStr) {
+    try {
+      final parts = dateStr.split('-');
+      if (parts.length != 3) return null;
+      return DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  void _showCustomRangePopup() {
+    final fromCtrl = TextEditingController();
+    final toCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final RegExp dateRegExp = RegExp(r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$');
+            bool isValid = fromCtrl.text.isNotEmpty && toCtrl.text.isNotEmpty &&
+                           dateRegExp.hasMatch(fromCtrl.text.trim()) && dateRegExp.hasMatch(toCtrl.text.trim());
+            
+            if (isValid) {
+              DateTime? fromD = _parseDate(fromCtrl.text.trim());
+              DateTime? toD = _parseDate(toCtrl.text.trim());
+              if (fromD != null && toD != null && fromD.isAfter(toD)) {
+                isValid = false;
+              }
+            }
+
+            return Dialog(
+              child: Padding(
+                padding: const EdgeInsets.all(15.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: fromCtrl,
+                      onChanged: (_) => setDialogState(() {}),
+                      keyboardType: TextInputType.datetime,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]'))],
+                      decoration: const InputDecoration(hintText: "FROM (In DD-MM-YYYY)"),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: toCtrl,
+                      onChanged: (_) => setDialogState(() {}),
+                      keyboardType: TextInputType.datetime,
+                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]'))],
+                      decoration: const InputDecoration(hintText: "TO (In DD-MM-YYYY)"),
+                    ),
+                    const SizedBox(height: 15),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: isValid ? Colors.green : Colors.grey),
+                            onPressed: !isValid ? null : () {
+                              setState(() {
+                                _isCustomMode = true;
+                                _customFrom = _parseDate(fromCtrl.text.trim());
+                                _customTo = _parseDate(toCtrl.text.trim());
+                              });
+                              Navigator.pop(context);
+                            },
+                            child: const Text("NEXT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("CLOSE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.partyIndex >= globalParties.length) return const Scaffold();
+    final party = globalParties[widget.partyIndex];
+    final pName = party['name'] ?? "Unknown";
+
+    if (party['transactions'] == null) {
+      party['transactions'] = <Map<String, dynamic>>[];
+    }
+    List transactions = party['transactions'];
+    
+    transactions.sort((a, b) {
+      DateTime d1 = _parseDate(a['date'] ?? '') ?? DateTime(1900);
+      DateTime d2 = _parseDate(b['date'] ?? '') ?? DateTime(1900);
+      return d1.compareTo(d2);
+    });
+
+    DateTime? partyOpenDate = _parseDate(party['opening_date'] ?? "");
+    if (partyOpenDate == null) partyOpenDate = DateTime.now();
+
+    double runningTotalDebit = 0.0;
+    double runningTotalCredit = 0.0;
+    
+    final double ob = (party['opening_balance'] ?? 0.0).toDouble();
+    final String ot = party['opening_type'] ?? 'debit';
+    
+    bool isBeforePartyOpening = false;
+    if (!_isCustomMode) {
+      isBeforePartyOpening = _viewYear < partyOpenDate.year || (_viewYear == partyOpenDate.year && _viewMonth < partyOpenDate.month);
+    } else {
+      isBeforePartyOpening = _customTo != null && _customTo!.isBefore(partyOpenDate);
+    }
+    
+    bool isOriginalOpening = false;
+    if (!_isCustomMode) {
+      isOriginalOpening = _viewMonth == partyOpenDate.month && _viewYear == partyOpenDate.year;
+    } else {
+      isOriginalOpening = _customFrom != null && !_customFrom!.isAfter(partyOpenDate);
+    }
+
+    if (!isBeforePartyOpening && !isOriginalOpening) {
+      if (ot == 'debit') runningTotalDebit += ob;
+      else runningTotalCredit += ob;
+    }
+
+    List displayedTransactions = [];
+    
+    for (var t in transactions) {
+      DateTime? d = _parseDate(t['date'] ?? '');
+      if (d == null) continue;
+
+      if (_isCustomMode) {
+        if (d.isBefore(_customFrom!)) {
+          runningTotalDebit += (t['debit'] ?? 0.0);
+          runningTotalCredit += (t['credit'] ?? 0.0);
+        } else if (!d.isAfter(_customTo!)) {
+          displayedTransactions.add(t);
+        }
+      } else {
+        if (d.year < _viewYear || (d.year == _viewYear && d.month < _viewMonth)) {
+          runningTotalDebit += (t['debit'] ?? 0.0);
+          runningTotalCredit += (t['credit'] ?? 0.0);
+        } else if (d.year == _viewYear && d.month == _viewMonth) {
+          displayedTransactions.add(t);
+        }
+      }
+    }
+
+    double carryForwardVal = (runningTotalDebit - runningTotalCredit).abs();
+    String carryForwardType = runningTotalDebit >= runningTotalCredit ? 'debit' : 'credit';
+
+    String displayOpeningDate = '';
+    if (isOriginalOpening) {
+      displayOpeningDate = party['opening_date'] ?? '';
+    } else {
+      if (_isCustomMode) {
+        displayOpeningDate = "${_customFrom!.day.toString().padLeft(2, '0')}-${_customFrom!.month.toString().padLeft(2, '0')}-${_customFrom!.year}";
+      } else {
+        displayOpeningDate = '01-${_viewMonth.toString().padLeft(2, '0')}-$_viewYear';
+      }
+    }
+
+    double displayOpeningVal = isOriginalOpening ? ob : carryForwardVal;
+    String displayOpeningType = isOriginalOpening ? ot : carryForwardType;
+
+    double totalDebit = 0.0;
+    double totalCredit = 0.0;
+    if (!isBeforePartyOpening) {
+      if (displayOpeningType == 'debit') totalDebit += displayOpeningVal;
+      else totalCredit += displayOpeningVal;
+      
+      for (var t in displayedTransactions) {
+        totalDebit += (t['debit'] ?? 0.0);
+        totalCredit += (t['credit'] ?? 0.0);
+      }
+    }
+
+    double grandTotal = (totalDebit - totalCredit).abs();
+    bool isDebitBigger = totalDebit >= totalCredit;
+    Color grandTotalColor = totalDebit == totalCredit 
+        ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black) 
+        : (isDebitBigger ? Colors.green : Colors.red);
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    bool isValidAdd = false;
+    if (_amountCtrl.text.isNotEmpty && _dateCtrl.text.isNotEmpty) {
+      final RegExp dateRegExp = RegExp(r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$');
+      if (dateRegExp.hasMatch(_dateCtrl.text.trim())) {
+        DateTime? enteredDate = _parseDate(_dateCtrl.text.trim());
+        DateTime? openingDate = _parseDate(party['opening_date'] ?? "");
+        if (enteredDate != null && openingDate != null && !enteredDate.isBefore(openingDate)) {
+          isValidAdd = true;
+        }
+      }
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.blueGrey[800],
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "LEDGER",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 10),
+          Text(
+            "NAME - $pName",
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 15),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 30,
+                  child: SizedBox(
+                    height: 45,
+                    child: TextField(
+                      controller: _amountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                      ],
+                      decoration: const InputDecoration(
+                        hintText: "AMOUNT",
+                        hintStyle: TextStyle(fontSize: 10),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  flex: 30,
+                  child: TextField(
+                    controller: _dateCtrl,
+                    onChanged: (_) => setState(() {}),
+                    keyboardType: TextInputType.datetime,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                    ],
+                    decoration: const InputDecoration(
+                      hintText: "DATE",
+                      hintStyle: TextStyle(fontSize: 10),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  flex: 15,
+                  child: _buildToggleBtn("DEBIT", _isDebit),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  flex: 15,
+                  child: _buildToggleBtn("CREDIT", !_isDebit),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  flex: 10,
+                  child: SizedBox(
+                    height: 45,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        backgroundColor: isValidAdd ? Colors.green : Colors.grey.withOpacity(0.5),
+                        foregroundColor: isValidAdd ? Colors.white : Colors.white70,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: !isValidAdd ? null : () async {
+                        setState(() {
+                          transactions.add({
+                            'date': _dateCtrl.text.trim(),
+                            'debit': _isDebit ? double.tryParse(_amountCtrl.text.trim()) ?? 0.0 : 0.0,
+                            'credit': !_isDebit ? double.tryParse(_amountCtrl.text.trim()) ?? 0.0 : 0.0,
+                          });
+                          _amountCtrl.clear();
+                          _dateCtrl.clear();
+                        });
+                        await LocalDatabase.savePartiesToDisk();
+                      },
+                      child: const Icon(Icons.add, size: 20),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 15),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            color: isDark ? Colors.blueGrey[900] : Colors.blueGrey[200],
+            child: _isCustomMode 
+              ? Row(
+                  children: [
+                    Text(
+                      "CUSTOM RANGE : FROM ${_customFrom!.day.toString().padLeft(2, '0')}-${_customFrom!.month.toString().padLeft(2, '0')}-${_customFrom!.year} TO ${_customTo!.day.toString().padLeft(2, '0')}-${_customTo!.month.toString().padLeft(2, '0')}-${_customTo!.year}",
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        setState(() {
+                          _isCustomMode = false;
+                          _viewMonth = DateTime.now().month;
+                          _viewYear = DateTime.now().year;
+                        });
+                      },
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Text("CURRENT MONTH : ${_months[_viewMonth - 1]} $_viewYear", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(Icons.arrow_back_ios, size: 14, color: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? Colors.grey : null),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? null : () {
+                        setState(() {
+                          if (_viewMonth == 1) {
+                            _viewMonth = 12;
+                            _viewYear--;
+                          } else {
+                            _viewMonth--;
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 5),
+                    IconButton(
+                      icon: Icon(Icons.arrow_forward_ios, size: 14, color: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? Colors.grey : null),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? null : () {
+                        setState(() {
+                          if (_viewMonth == 12) {
+                            _viewMonth = 1;
+                            _viewYear++;
+                          } else {
+                            _viewMonth++;
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: _showCustomRangePopup,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 30),
+                      ),
+                      child: const Text("CUSTOM", style: TextStyle(fontSize: 10)),
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        setState(() {
+                          _viewMonth = DateTime.now().month;
+                          _viewYear = DateTime.now().year;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+          ),
+          Container(
+            color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[100],
+            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+            child: Row(
+              children: const [
+                Expanded(flex: 10, child: Text("SR NO.", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                Expanded(flex: 50, child: Text("DATE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                Expanded(flex: 20, child: Text("DEBIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                Expanded(flex: 20, child: Text("CREDIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: displayedTransactions.length + (isBeforePartyOpening ? 0 : 1),
+              itemBuilder: (context, i) {
+                if (!isBeforePartyOpening && i == 0) {
+                  final String obDebit = (displayOpeningType == 'debit' && displayOpeningVal > 0) ? displayOpeningVal.toStringAsFixed(2) : '';
+                  final String obCredit = (displayOpeningType == 'credit' && displayOpeningVal > 0) ? displayOpeningVal.toStringAsFixed(2) : '';
+                  return Container(
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200, width: 1)),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+                    child: Row(
+                      children: [
+                        const Expanded(flex: 10, child: Text("OPENING", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold))),
+                        Expanded(flex: 50, child: Text(displayOpeningDate, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
+                        Expanded(flex: 20, child: Text(obDebit, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                        Expanded(flex: 20, child: Text(obCredit, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                      ],
+                    ),
+                  );
+                }
+
+                final t = displayedTransactions[isBeforePartyOpening ? i : i - 1];
+                final date = t['date'] ?? '';
+                final debitVal = t['debit'] ?? 0.0;
+                final creditVal = t['credit'] ?? 0.0;
+                
+                final debitStr = debitVal > 0 ? debitVal.toStringAsFixed(2) : '';
+                final creditStr = creditVal > 0 ? creditVal.toStringAsFixed(2) : '';
+
+                return Container(
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200, width: 1)),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+                  child: Row(
+                    children: [
+                      Expanded(flex: 10, child: Text("$i", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                      Expanded(flex: 50, child: Text(date, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
+                      Expanded(flex: 20, child: Text(debitStr, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                      Expanded(flex: 20, child: Text(creditStr, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade300, width: 2)),
+              color: isDark ? Colors.blueGrey[800] : Colors.grey[200],
+            ),
+            child: Row(
+              children: [
+                const Expanded(
+                  flex: 60,
+                  child: Text("TOTAL", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                ),
+                Expanded(
+                  flex: 20,
+                  child: Text(totalDebit.toStringAsFixed(2), style: const TextStyle(fontSize: 14, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                ),
+                Expanded(
+                  flex: 20,
+                  child: Text(totalCredit.toStringAsFixed(2), style: const TextStyle(fontSize: 14, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.blueGrey[900] : Colors.grey[300],
+            ),
+            child: Row(
+              children: [
+                const Expanded(
+                  flex: 60,
+                  child: Text("GRAND TOTAL", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                ),
+                Expanded(
+                  flex: 40,
+                  child: Text(grandTotal.toStringAsFixed(2), style: TextStyle(fontSize: 20, color: grandTotalColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
