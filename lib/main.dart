@@ -2930,9 +2930,35 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
 
-  void _showCenterBackupMenu() {
+  Future<void> _showCenterBackupMenu() async {
+    bool isVIP = false;
+    bool hasInternet = await CloudDatabase.hasInternetConnection();
+    if (currentFirebaseUser != null && currentFirebaseUser!.email != null) {
+      if (hasInternet) {
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('app_config')
+              .doc('whitelist')
+              .get(const GetOptions(source: Source.serverAndCache));
+          if (doc.exists) {
+            final data = doc.data();
+            if (data != null && data['allowed_emails'] is List) {
+              List allowed = data['allowed_emails'];
+              if (allowed.contains(currentFirebaseUser!.email)) {
+                isVIP = true;
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint("Error checking VIP status: $e");
+        }
+      }
+    }
+
     bool exportInventory = false;
     bool exportSettings = false;
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -2994,7 +3020,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       child: SizedBox(
                         height: 50,
                         child: ElevatedButton.icon(
-                          onPressed: !anySelected
+                          onPressed: (!anySelected || !isVIP)
                               ? null
                               : () async {
                                   if (currentFirebaseUser == null) {
@@ -3104,7 +3130,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       child: SizedBox(
                         height: 50,
                         child: ElevatedButton.icon(
-                          onPressed: !anySelected
+                          onPressed: (!anySelected || !isVIP)
                               ? null
                               : () async {
                                   if (currentFirebaseUser == null) {
@@ -3206,6 +3232,68 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                if (currentFirebaseUser == null) ...[
+                  Text(
+                    "SIGN-IN TO USE CLOUD SYNC",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.yellow[700],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ] else if (!hasInternet) ...[
+                  Text(
+                    "CONNECT TO INTERNET TO USE CLOUD SYNC",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.yellow[700],
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ] else if (isVIP) ...[
+                  const Text(
+                    "Hurray!! YOU ARE VIP USER",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    "YOU CAN FREELY USE CLOUD SYNC",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ] else ...[
+                  const Text(
+                    "Huff , YOU ARE NOT VIP USER",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    "TO BECOME VIP USER CONTACT",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    "SHRINIVAS PHUKE OR SOHAM INDURKAR",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ],
             ),
           );
