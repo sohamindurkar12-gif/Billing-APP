@@ -24,9 +24,12 @@ import 'package:window_manager/window_manager.dart';
 void main() async {
   // Ensures all Flutter components are completely bound and ready before modifying platform UI settings
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   if (Platform.isWindows || Platform.isLinux) {
-    await GoogleSignInDart.register(clientId: '594735884693-v0saapde88haedikdabrhdea0sjejcg9.apps.googleusercontent.com');
+    await GoogleSignInDart.register(
+      clientId:
+          '594735884693-v0saapde88haedikdabrhdea0sjejcg9.apps.googleusercontent.com',
+    );
   }
 
   // Immersive Sticky mode hides both the top status bar and bottom navigation bar completely
@@ -254,44 +257,49 @@ Future<String?> showColorPickerDialog(
                   Flexible(
                     child: GridView.builder(
                       shrinkWrap: true,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 6,
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                ),
-                itemCount: presetColors.length,
-                itemBuilder: (context, index) {
-                  final colorHex = presetColors[index];
-                  final isSelected = colorHex == selected;
-                  int colorInt = int.parse(colorHex.replaceFirst('#', '0xFF'));
-                  
-                  return GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        selected = colorHex;
-                      });
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Color(colorInt),
-                        shape: BoxShape.circle,
-                        border: isSelected
-                            ? Border.all(
-                                color: Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.white
-                                    : Colors.black,
-                                width: 3,
-                              )
-                            : null,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 6,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                          ),
+                      itemCount: presetColors.length,
+                      itemBuilder: (context, index) {
+                        final colorHex = presetColors[index];
+                        final isSelected = colorHex == selected;
+                        int colorInt = int.parse(
+                          colorHex.replaceFirst('#', '0xFF'),
+                        );
+
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              selected = colorHex;
+                            });
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Color(colorInt),
+                              shape: BoxShape.circle,
+                              border: isSelected
+                                  ? Border.all(
+                                      color:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.white
+                                          : Colors.black,
+                                      width: 3,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
             actions: [
               Row(
                 children: [
@@ -383,9 +391,18 @@ class LocalDatabase {
         if (settingsUri == null) return;
         var file = await saf.child(settingsUri, 'party_details.json');
         if (file == null) {
-          await saf.createFileAsString(settingsUri, mimeType: "application/json", displayName: "party_details.json", content: content);
+          await saf.createFileAsString(
+            settingsUri,
+            mimeType: "application/json",
+            displayName: "party_details.json",
+            content: content,
+          );
         } else {
-          await saf.writeToFileAsString(file.uri, content: content, mode: FileMode.write);
+          await saf.writeToFileAsString(
+            file.uri,
+            content: content,
+            mode: FileMode.write,
+          );
         }
       }
     } catch (e) {
@@ -413,7 +430,9 @@ class LocalDatabase {
 
       if (content != null) {
         List<dynamic> decoded = jsonDecode(content);
-        globalParties = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+        globalParties = decoded
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
       }
     } catch (e) {
       debugPrint("Error loading parties: $e");
@@ -592,6 +611,18 @@ class LocalDatabase {
     }
     return folder.uri;
   }
+
+  static Future<Uri?> getAccountsFolderUri() async {
+    if (Platform.isWindows) return null;
+    final baseUri = await getBaseFolderUri();
+    if (baseUri == null) return null;
+    var folder = await saf.child(baseUri, "ACCOUNTS");
+    if (folder == null) {
+      var doc = await saf.createDirectory(baseUri, "ACCOUNTS");
+      return doc?.uri;
+    }
+    return folder.uri;
+  }
 }
 
 // --- CLOUD DATABASE HELPER (PER-USER FIRESTORE SYNC) ---
@@ -661,7 +692,8 @@ class CloudDatabase {
                   .map((item) => Map<String, String>.from(item))
                   .toList();
             });
-            if (data.containsKey('categoryOrder') && data['categoryOrder'] != null) {
+            if (data.containsKey('categoryOrder') &&
+                data['categoryOrder'] != null) {
               List<String> order = List<String>.from(data['categoryOrder']);
               Map<String, List<Map<String, String>>> orderedInventory = {};
               for (String cat in order) {
@@ -838,7 +870,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             accessToken: googleAuth.accessToken,
             idToken: googleAuth.idToken,
           );
-          final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+          final userCredential = await FirebaseAuth.instance
+              .signInWithCredential(credential);
           currentFirebaseUser = userCredential.user;
         }
       }
@@ -865,77 +898,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 constraints: const BoxConstraints(maxWidth: 400),
                 child: Container(
                   padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.orange,
-                      size: 48,
-                    ),
-                    const SizedBox(height: 15),
-                    Text(
-                      titleText,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.blueGrey[100]
-                            : Colors.blueGrey,
-                        letterSpacing: 0.3,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orange,
+                        size: 48,
                       ),
-                    ),
-                    const SizedBox(height: 25),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 45,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text(
-                                "YES",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                      const SizedBox(height: 15),
+                      Text(
+                        titleText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.blueGrey[100]
+                              : Colors.blueGrey,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 25),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                child: const Text(
+                                  "YES",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: SizedBox(
-                            height: 45,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text(
-                                "NO",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const Text(
+                                  "NO",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
         ) ??
         false;
   }
@@ -960,130 +993,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
         pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
           return [
-              pw.Center(
-                child: pw.Text(
-                  globalShopName.toUpperCase(),
-                  style: pw.TextStyle(
-                    fontSize: 24,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
+            pw.Center(
+              child: pw.Text(
+                globalShopName.toUpperCase(),
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.SizedBox(height: 30),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text(
-                    "NAME - $customerName",
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.Text(
-                    "DATE - $displayDate",
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                  ),
-                ],
-              ),
-              pw.SizedBox(height: 10),
-              pw.Table(
-                border: pw.TableBorder.all(),
-                columnWidths: showRateColumn
-                    ? {
-                        0: const pw.FixedColumnWidth(35),
-                        1: const pw.FlexColumnWidth(3.0),
-                        2: const pw.FixedColumnWidth(95),
-                        3: const pw.FixedColumnWidth(110),
-                        4: const pw.FixedColumnWidth(110),
-                      }
-                    : {
-                        0: const pw.FixedColumnWidth(35),
-                        1: const pw.FlexColumnWidth(3.5),
-                        2: const pw.FixedColumnWidth(130),
-                        3: const pw.FixedColumnWidth(145),
-                      },
-                children: [
-                  pw.TableRow(
+            ),
+            pw.SizedBox(height: 30),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  "NAME - $customerName",
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Text(
+                  "DATE - $displayDate",
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table(
+              border: pw.TableBorder.all(),
+              columnWidths: showRateColumn
+                  ? {
+                      0: const pw.FixedColumnWidth(35),
+                      1: const pw.FlexColumnWidth(3.0),
+                      2: const pw.FixedColumnWidth(95),
+                      3: const pw.FixedColumnWidth(110),
+                      4: const pw.FixedColumnWidth(110),
+                    }
+                  : {
+                      0: const pw.FixedColumnWidth(35),
+                      1: const pw.FlexColumnWidth(3.5),
+                      2: const pw.FixedColumnWidth(130),
+                      3: const pw.FixedColumnWidth(145),
+                    },
+              children: [
+                pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text('Sr'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text('Item'),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text('Qty'),
+                    ),
+                    if (showRateColumn)
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text('Rate'),
+                      ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text('Total'),
+                    ),
+                  ],
+                ),
+                ...List.generate(_cart.length, (index) {
+                  final item = _cart[index];
+                  String rawEnglishName = item['name'] ?? "";
+                  if (rawEnglishName.contains(" (")) {
+                    rawEnglishName = rawEnglishName.split(" (").first;
+                  }
+                  return pw.TableRow(
                     children: [
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('Sr'),
+                        child: pw.Text('${index + 1}'),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('Item'),
+                        child: pw.Text(rawEnglishName),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('Qty'),
+                        child: pw.Text('${item['qty']} ${item['unit']}'),
                       ),
                       if (showRateColumn)
                         pw.Padding(
                           padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text('Rate'),
+                          child: pw.Text('Rs ${item['rate']}'),
                         ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('Total'),
-                      ),
-                    ],
-                  ),
-                  ...List.generate(_cart.length, (index) {
-                    final item = _cart[index];
-                    String rawEnglishName = item['name'] ?? "";
-                    if (rawEnglishName.contains(" (")) {
-                      rawEnglishName = rawEnglishName.split(" (").first;
-                    }
-                    return pw.TableRow(
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text('${index + 1}'),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(rawEnglishName),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text('${item['qty']} ${item['unit']}'),
-                        ),
-                        if (showRateColumn)
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.all(5),
-                            child: pw.Text('Rs ${item['rate']}'),
-                          ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(
-                            'Rs ${item['total'].toStringAsFixed(2)}',
-                          ),
-                        ),
-                      ],
-                    );
-                  }),
-                  pw.TableRow(
-                    children: [
-                      pw.SizedBox(),
-                      pw.SizedBox(),
-                      if (showRateColumn) pw.SizedBox(),
-                      pw.Container(
-                        alignment: pw.Alignment.centerRight,
-                        padding: const pw.EdgeInsets.all(5),
                         child: pw.Text(
-                          "GRAND TOTAL: ",
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                        ),
-                      ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text(
-                          "Rs ${grandTotal.toStringAsFixed(2)}",
-                          style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                          'Rs ${item['total'].toStringAsFixed(2)}',
                         ),
                       ),
                     ],
-                  ),
-                ],
-              ),
+                  );
+                }),
+                pw.TableRow(
+                  children: [
+                    pw.SizedBox(),
+                    pw.SizedBox(),
+                    if (showRateColumn) pw.SizedBox(),
+                    pw.Container(
+                      alignment: pw.Alignment.centerRight,
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        "GRAND TOTAL: ",
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        "Rs ${grandTotal.toStringAsFixed(2)}",
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ];
         },
       ),
@@ -1133,7 +1166,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onKeyEvent: (node, event) {
           if (!Platform.isWindows) return KeyEventResult.ignored;
           if (event is KeyDownEvent) {
-            if (event.logicalKey == LogicalKeyboardKey.backspace && HardwareKeyboard.instance.isShiftPressed) {
+            if (event.logicalKey == LogicalKeyboardKey.backspace &&
+                HardwareKeyboard.instance.isShiftPressed) {
               Navigator.pop(context);
               return KeyEventResult.handled;
             }
@@ -1142,183 +1176,184 @@ class _DashboardScreenState extends State<DashboardScreen> {
         },
         child: Dialog(
           child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: StatefulBuilder(
-            builder: (context, setPopupState) {
-              return Container(
-                padding: const EdgeInsets.all(15),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "PLS ENTER THE NAME OF CUSTOMER",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.blueGrey[100]
-                          : Colors.blueGrey,
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    autofocus: true,
-                    controller: nameController,
-                    textCapitalization: TextCapitalization.words,
-                    onSubmitted: (val) {
-                      Navigator.pop(context);
-                      _generatePDF(
-                        val.trim().isEmpty ? "CASH" : val.trim(),
-                        globalShowRateSetting,
-                      );
-                    },
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'[a-zA-Z0-9\s\-.,()&/\\]'),
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: StatefulBuilder(
+              builder: (context, setPopupState) {
+                return Container(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "PLS ENTER THE NAME OF CUSTOMER",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.blueGrey[100]
+                              : Colors.blueGrey,
+                        ),
                       ),
-                    ],
-                    decoration: InputDecoration(
-                      hintText: "Enter Name (In English Only)...",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
+                      const SizedBox(height: 15),
+                      TextField(
+                        autofocus: true,
+                        controller: nameController,
+                        textCapitalization: TextCapitalization.words,
+                        onSubmitted: (val) {
+                          Navigator.pop(context);
+                          _generatePDF(
+                            val.trim().isEmpty ? "CASH" : val.trim(),
+                            globalShowRateSetting,
+                          );
+                        },
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[a-zA-Z0-9\s\-.,()&/\\]'),
+                          ),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: "Enter Name (In English Only)...",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                        onChanged: (val) {
+                          setPopupState(() {
+                            isNameTyped = val.trim().isNotEmpty;
+                          });
+                        },
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () => setPopupState(
+                          () => globalShowRateSetting = !globalShowRateSetting,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                "SHOW RATE COLUMN IN BILL",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.blueGrey[200]
+                                      : Colors.blueGrey,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Checkbox(
+                                value: globalShowRateSetting,
+                                activeColor:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.blueGrey[400]
+                                    : Colors.blueGrey[800],
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (val) => setPopupState(
+                                  () => globalShowRateSetting = val ?? true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                    onChanged: (val) {
-                      setPopupState(() {
-                        isNameTyped = val.trim().isNotEmpty;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  InkWell(
-                    onTap: () => setPopupState(
-                      () => globalShowRateSetting = !globalShowRateSetting,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
+                      const SizedBox(height: 12),
+                      Row(
                         children: [
-                          Text(
-                            "SHOW RATE COLUMN IN BILL",
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.blueGrey[200]
-                                  : Colors.blueGrey,
-                              letterSpacing: 0.5,
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isNameTyped
+                                      ? Colors.green
+                                      : Colors.grey[300],
+                                  foregroundColor: Colors.black,
+                                ),
+                                onPressed: !isNameTyped
+                                    ? null
+                                    : () {
+                                        Navigator.pop(context);
+                                        _generatePDF(
+                                          nameController.text.trim(),
+                                          globalShowRateSetting,
+                                        );
+                                      },
+                                child: const Text(
+                                  "DONE",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Checkbox(
-                            value: globalShowRateSetting,
-                            activeColor:
-                                Theme.of(context).brightness == Brightness.dark
-                                ? Colors.blueGrey[400]
-                                : Colors.blueGrey[800],
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                            onChanged: (val) => setPopupState(
-                              () => globalShowRateSetting = val ?? true,
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.black,
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
+                                child: const Text(
+                                  "CANCEL",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.black,
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _generatePDF("CASH", globalShowRateSetting);
+                                },
+                                child: const Text(
+                                  "SKIP",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 45,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isNameTyped
-                                  ? Colors.green
-                                  : Colors.grey[300],
-                              foregroundColor: Colors.black,
-                            ),
-                            onPressed: !isNameTyped
-                                ? null
-                                : () {
-                                    Navigator.pop(context);
-                                    _generatePDF(
-                                      nameController.text.trim(),
-                                      globalShowRateSetting,
-                                    );
-                                  },
-                            child: const Text(
-                              "DONE",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: SizedBox(
-                          height: 45,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.black,
-                            ),
-                            onPressed: () {
-                              Navigator.pop(context);
-                            },
-                            child: const Text(
-                              "CANCEL",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: SizedBox(
-                          height: 45,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.black,
-                            ),
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _generatePDF("CASH", globalShowRateSetting);
-                            },
-                            child: const Text(
-                              "SKIP",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
-                ],
-              ),
-              );
-            },
-          ),
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -1420,7 +1455,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             void submitEntry() {
               double q = double.tryParse(localQty) ?? 0;
               double r = double.tryParse(localRate) ?? 0;
-              
+
               if (q == 0 || r == 0) return;
 
               double total = 0.0;
@@ -1470,7 +1505,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (isShift) {
                         if (allowedUnits.length > 1) {
                           setPopupState(() {
-                            currentUnit = currentUnit == allowedUnits[0] ? allowedUnits[1] : allowedUnits[0];
+                            currentUnit = currentUnit == allowedUnits[0]
+                                ? allowedUnits[1]
+                                : allowedUnits[0];
                           });
                         }
                       } else {
@@ -1482,7 +1519,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (isShift) {
                         if (allowedUnits.length > 1) {
                           setPopupState(() {
-                            currentUnit = currentUnit == allowedUnits[0] ? allowedUnits[1] : allowedUnits[0];
+                            currentUnit = currentUnit == allowedUnits[0]
+                                ? allowedUnits[1]
+                                : allowedUnits[0];
                           });
                         }
                       } else {
@@ -1744,13 +1783,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         height: 50,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: ((double.tryParse(localQty) ?? 0) == 0 || (double.tryParse(localRate) ?? 0) == 0) 
-                                ? Colors.grey[400] 
+                            backgroundColor:
+                                ((double.tryParse(localQty) ?? 0) == 0 ||
+                                    (double.tryParse(localRate) ?? 0) == 0)
+                                ? Colors.grey[400]
                                 : Colors.green,
                             foregroundColor: Colors.white,
                           ),
-                          onPressed: ((double.tryParse(localQty) ?? 0) == 0 || (double.tryParse(localRate) ?? 0) == 0) 
-                              ? null 
+                          onPressed:
+                              ((double.tryParse(localQty) ?? 0) == 0 ||
+                                  (double.tryParse(localRate) ?? 0) == 0)
+                              ? null
                               : submitEntry,
                           child: Text(
                             editCartIndex != null
@@ -1789,7 +1832,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Text(
                 "CURRENT BILL (${_cart.length} Items)",
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               if (isDialog)
                 IconButton(
@@ -1857,10 +1903,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         Container(
                                           width: 28,
                                           height: 28,
-                                          margin: const EdgeInsets.only(right: 8.0),
+                                          margin: const EdgeInsets.only(
+                                            right: 8.0,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: Theme.of(context).brightness == Brightness.dark 
-                                                ? Colors.blueGrey[600] 
+                                            color:
+                                                Theme.of(context).brightness ==
+                                                    Brightness.dark
+                                                ? Colors.blueGrey[600]
                                                 : Colors.blueGrey[400],
                                             shape: BoxShape.circle,
                                           ),
@@ -1876,8 +1926,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         ),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Text(
                                                 cartItem['name'],
@@ -1890,7 +1942,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               Text(
                                                 "${cartItem['qty']} ${cartItem['unit']} x ₹${cartItem['rate']}",
                                                 style: TextStyle(
-                                                  color: Theme.of(context).brightness == Brightness.dark
+                                                  color:
+                                                      Theme.of(
+                                                            context,
+                                                          ).brightness ==
+                                                          Brightness.dark
                                                       ? Colors.grey[300]
                                                       : Colors.grey[700],
                                                   fontSize: 13,
@@ -2156,7 +2212,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Text(
                   categories[index].toUpperCase(),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
@@ -2316,64 +2375,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         children: [
           Expanded(child: _buildMiddleLayout()),
-        if (showBottomBar)
-          Container(
-            height: 75,
-            color: Colors.blueGrey[900],
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 4,
-                  child: InkWell(
-                    onTap: _showCart,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Badge(
-                          label: Text(
-                            _cart.length.toString(),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
+          if (showBottomBar)
+            Container(
+              height: 75,
+              color: Colors.blueGrey[900],
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: InkWell(
+                      onTap: _showCart,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Badge(
+                            label: Text(
+                              _cart.length.toString(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            backgroundColor: Colors.red,
+                            isLabelVisible: _cart.isNotEmpty,
+                            child: const Icon(
+                              Icons.shopping_cart,
                               color: Colors.white,
+                              size: 26,
                             ),
                           ),
-                          backgroundColor: Colors.red,
-                          isLabelVisible: _cart.isNotEmpty,
-                          child: const Icon(
-                            Icons.shopping_cart,
-                            color: Colors.white,
-                            size: 26,
+                          const SizedBox(height: 2),
+                          const Text(
+                            "CART",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          "CART",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  flex: 6,
-                  child: Center(
-                    child: Text(
-                      "TOTAL: ₹${totalBill.toStringAsFixed(2)}",
-                      style: const TextStyle(
-                        color: Colors.greenAccent,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        ],
                       ),
                     ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    flex: 6,
+                    child: Center(
+                      child: Text(
+                        "TOTAL: ₹${totalBill.toStringAsFixed(2)}",
+                        style: const TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -2397,7 +2456,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     }
 
-    if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.numpadEnter) {
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
       if (isShift && _cart.isNotEmpty) {
         _showCustomerNamePopup();
         return KeyEventResult.handled;
@@ -2405,9 +2465,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     String char = event.character ?? '';
-    if (key.keyId >= LogicalKeyboardKey.digit0.keyId && key.keyId <= LogicalKeyboardKey.digit9.keyId) {
+    if (key.keyId >= LogicalKeyboardKey.digit0.keyId &&
+        key.keyId <= LogicalKeyboardKey.digit9.keyId) {
       char = (key.keyId - LogicalKeyboardKey.digit0.keyId).toString();
-    } else if (key.keyId >= LogicalKeyboardKey.numpad0.keyId && key.keyId <= LogicalKeyboardKey.numpad9.keyId) {
+    } else if (key.keyId >= LogicalKeyboardKey.numpad0.keyId &&
+        key.keyId <= LogicalKeyboardKey.numpad9.keyId) {
       char = (key.keyId - LogicalKeyboardKey.numpad0.keyId).toString();
     }
 
@@ -2425,7 +2487,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _triggerDebounce() {
     _keyDebounceTimer?.cancel();
-    _keyDebounceTimer = Timer(const Duration(milliseconds: 500), _executeShortcut);
+    _keyDebounceTimer = Timer(
+      const Duration(milliseconds: 500),
+      _executeShortcut,
+    );
   }
 
   void _executeShortcut() {
@@ -2450,7 +2515,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           for (var item in itemsList) {
             String baseName = item['name'] ?? "";
             String regName = item['regional_name'] ?? "";
-            String testName = regName.isNotEmpty ? "$baseName ($regName)" : baseName;
+            String testName = regName.isNotEmpty
+                ? "$baseName ($regName)"
+                : baseName;
             if (testName == cartItem['name'] || baseName == cartItem['name']) {
               baseItemMatch = item;
             }
@@ -2472,7 +2539,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           });
         }
       } else {
-        List<Map<String, String>> categoryItems = globalInventory[_selectedCategoryForGrid!] ?? [];
+        List<Map<String, String>> categoryItems =
+            globalInventory[_selectedCategoryForGrid!] ?? [];
         if (index <= categoryItems.length) {
           _showItemEntryPopup(categoryItems[index - 1]);
         }
@@ -2489,43 +2557,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
         appBar: AppBar(
-        backgroundColor: Colors.blueGrey[900],
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.build_circle, color: Colors.white),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const SetupScreen()),
-          ).then((_) => setState(() {})),
-        ),
-        title: const Text(
-          "BILLING APP",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
+          backgroundColor: Colors.blueGrey[900],
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.build_circle, color: Colors.white),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const WarehouseScreen()),
+              MaterialPageRoute(builder: (context) => const SetupScreen()),
             ).then((_) => setState(() {})),
           ),
-        ],
-      ),
-      body: _isLoadingDb
-          ? const Center(child: CircularProgressIndicator())
-          : Platform.isWindows
-          ? Row(
-              children: [
-                Expanded(flex: 3, child: _buildMobileAppView(false, totalBill)),
-                Container(width: 1, color: Colors.grey.withOpacity(0.5)),
-                Expanded(
-                  flex: 2,
-                  child: _buildCartWidget(setState, isDialog: false),
+          title: const Text(
+            "BILLING APP",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.settings, color: Colors.white),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const WarehouseScreen(),
                 ),
-              ],
-            )
-          : _buildMobileAppView(true, totalBill),
+              ).then((_) => setState(() {})),
+            ),
+          ],
+        ),
+        body: _isLoadingDb
+            ? const Center(child: CircularProgressIndicator())
+            : Platform.isWindows
+            ? Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: _buildMobileAppView(false, totalBill),
+                  ),
+                  Container(width: 1, color: Colors.grey.withOpacity(0.5)),
+                  Expanded(
+                    flex: 2,
+                    child: _buildCartWidget(setState, isDialog: false),
+                  ),
+                ],
+              )
+            : _buildMobileAppView(true, totalBill),
       ),
     );
   }
@@ -3196,238 +3269,240 @@ class _SetupScreenState extends State<SetupScreen> {
               constraints: const BoxConstraints(maxWidth: 400),
               child: SingleChildScrollView(
                 child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Text(
-                      "APP SETTINGS",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blueGrey,
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        "APP SETTINGS",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueGrey,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    const Text(
-                      "SHOP NAME ( Will be displayed at top in BILL)",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    TextField(
-                      controller: shopNameController,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[a-zA-Z0-9 ]'),
-                        ),
-                      ],
-                      decoration: InputDecoration(
-                        hintText: "Enter Shop Name",
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 15,
+                      const Text(
+                        "SHOP NAME ( Will be displayed at top in BILL)",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                      onChanged: (val) {
-                        tempShopName = val;
-                      },
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 5),
+                      TextField(
+                        controller: shopNameController,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[a-zA-Z0-9 ]'),
+                          ),
+                        ],
+                        decoration: InputDecoration(
+                          hintText: "Enter Shop Name",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 15,
+                          ),
+                        ),
+                        onChanged: (val) {
+                          tempShopName = val;
+                        },
+                      ),
+                      const SizedBox(height: 20),
 
-                    const Text(
-                      "THEME",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                      const Text(
+                        "THEME",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () =>
-                                setPopupState(() => tempTheme = "LIGHT"),
-                            child: Container(
-                              height: 60,
-                              decoration: BoxDecoration(
-                                color: tempTheme == "LIGHT"
-                                    ? Colors.blue.withOpacity(0.1)
-                                    : Colors.transparent,
-                                border: Border.all(
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () =>
+                                  setPopupState(() => tempTheme = "LIGHT"),
+                              child: Container(
+                                height: 60,
+                                decoration: BoxDecoration(
                                   color: tempTheme == "LIGHT"
-                                      ? Colors.blue
-                                      : Colors.grey,
+                                      ? Colors.blue.withOpacity(0.1)
+                                      : Colors.transparent,
+                                  border: Border.all(
+                                    color: tempTheme == "LIGHT"
+                                        ? Colors.blue
+                                        : Colors.grey,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.wb_sunny,
-                                    size: 40,
-                                    color: Colors.black12,
-                                  ),
-                                  Text(
-                                    "LIGHT",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: tempTheme == "LIGHT"
-                                          ? Colors.blue
-                                          : Colors.grey,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.wb_sunny,
+                                      size: 40,
+                                      color: Colors.black12,
                                     ),
-                                  ),
-                                ],
+                                    Text(
+                                      "LIGHT",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: tempTheme == "LIGHT"
+                                            ? Colors.blue
+                                            : Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () =>
-                                setPopupState(() => tempTheme = "DARK"),
-                            child: Container(
-                              height: 60,
-                              decoration: BoxDecoration(
-                                color: tempTheme == "DARK"
-                                    ? Colors.indigo.withOpacity(0.1)
-                                    : Colors.transparent,
-                                border: Border.all(
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () =>
+                                  setPopupState(() => tempTheme = "DARK"),
+                              child: Container(
+                                height: 60,
+                                decoration: BoxDecoration(
                                   color: tempTheme == "DARK"
-                                      ? Colors.indigo
-                                      : Colors.grey,
+                                      ? Colors.indigo.withOpacity(0.1)
+                                      : Colors.transparent,
+                                  border: Border.all(
+                                    color: tempTheme == "DARK"
+                                        ? Colors.indigo
+                                        : Colors.grey,
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Icon(
-                                    Icons.nightlight_round,
-                                    size: 40,
-                                    color: Colors.black12,
-                                  ),
-                                  Text(
-                                    "DARK",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: tempTheme == "DARK"
-                                          ? Colors.indigo
-                                          : Colors.grey,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.nightlight_round,
+                                      size: 40,
+                                      color: Colors.black12,
                                     ),
-                                  ),
-                                ],
+                                    Text(
+                                      "DARK",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: tempTheme == "DARK"
+                                            ? Colors.indigo
+                                            : Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    const Text(
-                      "LAYOUT",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    Column(
-                      children: [
-                        _buildLayoutOption(
-                          title: "SEARCH BAR LAYOUT",
-                          icon: Icons.search,
-                          layoutCode: "SBL",
-                          currentSelection: tempLayout,
-                          onTap: () => setPopupState(() => tempLayout = "SBL"),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildLayoutOption(
-                          title: "DIRECT GRID LAYOUT",
-                          icon: Icons.grid_view,
-                          layoutCode: "DGL",
-                          currentSelection: tempLayout,
-                          onTap: () => setPopupState(() => tempLayout = "DGL"),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildLayoutOption(
-                          title: "HYBRID LAYOUT",
-                          icon: Icons.dashboard_customize,
-                          layoutCode: "HL",
-                          currentSelection: tempLayout,
-                          onTap: () => setPopupState(() => tempLayout = "HL"),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey[200],
-                              foregroundColor: Colors.black87,
-                            ),
-                            onPressed: () {
-                              if (tempShopName != globalShopName ||
-                                  tempTheme != currentThemeSetting ||
-                                  tempLayout != currentLayoutSetting) {
-                                showUnsavedWarning();
-                              } else {
-                                Navigator.pop(context);
-                              }
-                            },
-                            child: const Text(
-                              "CLOSE",
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                      const Text(
+                        "LAYOUT",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Column(
+                        children: [
+                          _buildLayoutOption(
+                            title: "SEARCH BAR LAYOUT",
+                            icon: Icons.search,
+                            layoutCode: "SBL",
+                            currentSelection: tempLayout,
+                            onTap: () =>
+                                setPopupState(() => tempLayout = "SBL"),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildLayoutOption(
+                            title: "DIRECT GRID LAYOUT",
+                            icon: Icons.grid_view,
+                            layoutCode: "DGL",
+                            currentSelection: tempLayout,
+                            onTap: () =>
+                                setPopupState(() => tempLayout = "DGL"),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildLayoutOption(
+                            title: "HYBRID LAYOUT",
+                            icon: Icons.dashboard_customize,
+                            layoutCode: "HL",
+                            currentSelection: tempLayout,
+                            onTap: () => setPopupState(() => tempLayout = "HL"),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.grey[200],
+                                foregroundColor: Colors.black87,
+                              ),
+                              onPressed: () {
+                                if (tempShopName != globalShopName ||
+                                    tempTheme != currentThemeSetting ||
+                                    tempLayout != currentLayoutSetting) {
+                                  showUnsavedWarning();
+                                } else {
+                                  Navigator.pop(context);
+                                }
+                              },
+                              child: const Text(
+                                "CLOSE",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () async {
-                              String entry = shopNameController.text.trim();
-                              globalShopName = entry.isEmpty
-                                  ? "RETAIL INVOICE"
-                                  : entry.toUpperCase();
-                              currentThemeSetting = tempTheme;
-                              currentLayoutSetting = tempLayout;
-                              await LocalDatabase.saveAppSettings();
-                              if (mounted) {
-                                Navigator.pop(context);
-                                smartBillingAppKey.currentState?.rebuildApp();
-                              }
-                            },
-                            child: const Text(
-                              "SAVE",
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () async {
+                                String entry = shopNameController.text.trim();
+                                globalShopName = entry.isEmpty
+                                    ? "RETAIL INVOICE"
+                                    : entry.toUpperCase();
+                                currentThemeSetting = tempTheme;
+                                currentLayoutSetting = tempLayout;
+                                await LocalDatabase.saveAppSettings();
+                                if (mounted) {
+                                  Navigator.pop(context);
+                                  smartBillingAppKey.currentState?.rebuildApp();
+                                }
+                              },
+                              child: const Text(
+                                "SAVE",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
             ),
           );
         },
@@ -3690,9 +3765,7 @@ class WarehouseScreen extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const LedgerScreen(),
-                  ),
+                  MaterialPageRoute(builder: (context) => const LedgerScreen()),
                 ),
                 icon: const Icon(Icons.account_balance_wallet),
                 label: const Text("ACCOUNTING"),
@@ -3719,8 +3792,8 @@ class WarehouseScreen extends StatelessWidget {
                     builder: (context) => const HistoryScreen(),
                   ),
                 ),
-                icon: const Icon(Icons.history),
-                label: const Text("HISTORY"),
+                icon: const Icon(Icons.picture_as_pdf),
+                label: const Text("PDF HISTORY"),
                 style: ElevatedButton.styleFrom(
                   backgroundColor:
                       Theme.of(context).brightness == Brightness.dark
@@ -3886,6 +3959,394 @@ class _HistoryScreenState extends State<HistoryScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
           "BILL HISTORY",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 8.0,
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              height: 60,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const LedgerHistoryScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.account_balance_wallet),
+                label: const Text(
+                  "LEDGER",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                      ? Colors.blueGrey[800]
+                      : Colors.blueGrey[50],
+                  foregroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.blueGrey[900],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 4.0,
+            ),
+            child: TextField(
+              controller: _historySearchController,
+              onChanged: _historySearchChanged,
+              decoration: InputDecoration(
+                hintText: "Search Invoice Name...",
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _historySearchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _historySearchController.clear();
+                          _historySearchChanged("");
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ),
+          const Divider(height: 1, thickness: 1),
+          Expanded(
+            child: _filteredPdfFiles.isEmpty
+                ? const Center(
+                    child: Text(
+                      "No records found.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _filteredPdfFiles.length,
+                    itemBuilder: (context, index) {
+                      final file = _filteredPdfFiles[index];
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4.0,
+                              vertical: 2.0,
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 85,
+                                  child: Container(
+                                    height: 58,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.blueGrey[800]
+                                          : Colors.blueGrey[50],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(16),
+                                      onTap: () async {
+                                        try {
+                                          if (file is File) {
+                                            OpenFilex.open(file.path);
+                                          } else {
+                                            final safFile =
+                                                file as saf.DocumentFile;
+                                            final bytes = await saf
+                                                .getDocumentContent(
+                                                  safFile.uri,
+                                                );
+                                            if (bytes != null) {
+                                              final tempFile = File(
+                                                '${Directory.systemTemp.path}/${safFile.name}',
+                                              );
+                                              await tempFile.writeAsBytes(
+                                                bytes,
+                                              );
+                                              OpenFilex.open(tempFile.path);
+                                            }
+                                          }
+                                        } catch (e) {
+                                          debugPrint("Error opening file: $e");
+                                        }
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12.0),
+                                        child: Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.picture_as_pdf,
+                                              color: Colors.red,
+                                              size: 28,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Text(
+                                                _parseInvoiceNameForDisplay(
+                                                  file is File
+                                                      ? file.path
+                                                            .split(
+                                                              Platform
+                                                                  .pathSeparator,
+                                                            )
+                                                            .last
+                                                      : (file as saf.DocumentFile)
+                                                                .name ??
+                                                            "Unknown",
+                                                ),
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13.5,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : Colors.black87,
+                                                ),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  flex: 15,
+                                  child: Container(
+                                    height: 58,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.blueGrey[700]
+                                          : Colors.blueGrey[100],
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(16),
+                                      onTap: () async {
+                                        try {
+                                          if (file is File) {
+                                            Share.shareXFiles([
+                                              XFile(file.path),
+                                            ], text: 'Invoice Sharing');
+                                          } else {
+                                            final safFile =
+                                                file as saf.DocumentFile;
+                                            final bytes = await saf
+                                                .getDocumentContent(
+                                                  safFile.uri,
+                                                );
+                                            if (bytes != null) {
+                                              final tempFile = File(
+                                                '${Directory.systemTemp.path}/${safFile.name}',
+                                              );
+                                              await tempFile.writeAsBytes(
+                                                bytes,
+                                              );
+                                              Share.shareXFiles([
+                                                XFile(tempFile.path),
+                                              ], text: 'Invoice Sharing');
+                                            }
+                                          }
+                                        } catch (e) {
+                                          debugPrint("Error sharing file: $e");
+                                        }
+                                      },
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.share,
+                                            color: isDark
+                                                ? Colors.blueGrey[100]
+                                                : Colors.blueGrey,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "SHARE",
+                                            style: TextStyle(
+                                              fontSize: 8.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: isDark
+                                                  ? Colors.blueGrey[100]
+                                                  : Colors.blueGrey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 1, thickness: 1),
+                        ],
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- HISTORY SCREEN ---
+class LedgerHistoryScreen extends StatefulWidget {
+  const LedgerHistoryScreen({super.key});
+  @override
+  State<LedgerHistoryScreen> createState() => _LedgerHistoryScreenState();
+}
+
+class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
+  List<dynamic> _allPdfFiles = [];
+  List<dynamic> _filteredPdfFiles = [];
+  final TextEditingController _historySearchController =
+      TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    if (Platform.isWindows) {
+      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String dir = "$baseDir\\Billing APP\\ACCOUNTS";
+      Directory myBillsDir = Directory(dir);
+      if (myBillsDir.existsSync()) {
+        List<File> loadedFiles = myBillsDir
+            .listSync()
+            .where((e) => e is File && e.path.endsWith('.pdf'))
+            .map((e) => e as File)
+            .toList();
+
+        loadedFiles.sort((a, b) {
+          final aDate = a.lastModifiedSync();
+          final bDate = b.lastModifiedSync();
+          return bDate.compareTo(aDate);
+        });
+
+        setState(() {
+          _allPdfFiles = loadedFiles;
+          _filteredPdfFiles = loadedFiles;
+        });
+      }
+      return;
+    }
+
+    final uri = await LocalDatabase.getAccountsFolderUri();
+    if (uri != null) {
+      final stream = saf.listFiles(
+        uri,
+        columns: [
+          saf.DocumentFileColumn.displayName,
+          saf.DocumentFileColumn.lastModified,
+          saf.DocumentFileColumn.size,
+        ],
+      );
+      List<saf.DocumentFile> loadedFiles = [];
+
+      await for (var doc in stream) {
+        if (doc.name != null && doc.name!.endsWith('.pdf')) {
+          loadedFiles.add(doc);
+        }
+      }
+
+      loadedFiles.sort((a, b) {
+        final aDate = a.lastModified ?? DateTime(2000);
+        final bDate = b.lastModified ?? DateTime(2000);
+        return bDate.compareTo(aDate);
+      });
+
+      setState(() {
+        _allPdfFiles = loadedFiles;
+        _filteredPdfFiles = loadedFiles;
+      });
+    }
+  }
+
+  void _historySearchChanged(String query) {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _filteredPdfFiles = _allPdfFiles;
+      });
+      return;
+    }
+    setState(() {
+      _filteredPdfFiles = _allPdfFiles.where((file) {
+        String name = file is File
+            ? file.path.split(Platform.pathSeparator).last
+            : (file as saf.DocumentFile).name ?? "";
+        String printableName = _parseInvoiceNameForDisplay(name).toLowerCase();
+        return printableName.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  String _parseInvoiceNameForDisplay(String fullPath) {
+    try {
+      final rawName = fullPath
+          .split(Platform.pathSeparator)
+          .last
+          .replaceAll('.pdf', '');
+      final parts = rawName.split('_');
+      if (parts.length >= 3 && parts[0].length == 8 && parts[1].length == 6) {
+        String rawDate = parts[0];
+        String rawTime = parts[1];
+        String formattedName = parts.sublist(2).join(' ');
+        String displayDate =
+            "${rawDate.substring(6, 8)}-${rawDate.substring(4, 6)}-${rawDate.substring(0, 4)}";
+        int hour = int.parse(rawTime.substring(0, 2));
+        String minute = rawTime.substring(2, 4);
+        String second = rawTime.substring(4, 6);
+        String period = hour >= 12 ? "PM" : "AM";
+        int displayHour = hour % 12;
+        if (displayHour == 0) displayHour = 12;
+        String displayTime =
+            "${displayHour.toString().padLeft(2, '0')}:$minute:$second $period";
+        return "$formattedName $displayDate $displayTime";
+      }
+    } catch (e) {
+      debugPrint("Parsing configuration mismatch detected: $e");
+    }
+    return fullPath.split(Platform.pathSeparator).last;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.blueGrey[800],
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          "LEDGER HISTORY",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
@@ -4126,65 +4587,65 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
               constraints: const BoxConstraints(maxWidth: 400),
               child: Container(
                 padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.orange,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 15),
-                  Text(
-                    msg,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 48,
                     ),
-                  ),
-                  const SizedBox(height: 25),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 45,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text(
-                              "YES",
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                    const SizedBox(height: 15),
+                    Text(
+                      msg,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 45,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text(
+                                "YES",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SizedBox(
-                          height: 45,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text(
-                              "NO",
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: 45,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text(
+                                "NO",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
             ),
           ),
         ) ??
@@ -4325,7 +4786,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       GestureDetector(
                         onTap: () async {
                           String oldName = names[i];
-                          TextEditingController nameCtrl = TextEditingController(text: oldName);
+                          TextEditingController nameCtrl =
+                              TextEditingController(text: oldName);
                           String? newColor = await showColorPickerDialog(
                             context,
                             globalCategoryColors[oldName],
@@ -4337,10 +4799,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                               String newName = nameCtrl.text.trim();
                               if (newName.isNotEmpty && newName != oldName) {
                                 if (!globalInventory.containsKey(newName)) {
-                                  Map<String, List<Map<String, String>>> newInventory = {};
+                                  Map<String, List<Map<String, String>>>
+                                  newInventory = {};
                                   for (String key in globalInventory.keys) {
                                     if (key == oldName) {
-                                      newInventory[newName] = globalInventory[oldName] ?? [];
+                                      newInventory[newName] =
+                                          globalInventory[oldName] ?? [];
                                     } else {
                                       newInventory[key] = globalInventory[key]!;
                                     }
@@ -4442,65 +4906,65 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
               constraints: const BoxConstraints(maxWidth: 400),
               child: Container(
                 padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: Colors.orange,
-                    size: 48,
-                  ),
-                  const SizedBox(height: 15),
-                  Text(
-                    msg,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.blueGrey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 48,
                     ),
-                  ),
-                  const SizedBox(height: 25),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 45,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text(
-                              "YES",
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                    const SizedBox(height: 15),
+                    Text(
+                      msg,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                    const SizedBox(height: 25),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 45,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text(
+                                "YES",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: SizedBox(
-                          height: 45,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text(
-                              "NO",
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: 45,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text(
+                                "NO",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
             ),
           ),
         ) ??
@@ -4792,104 +5256,112 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                 Expanded(
                                   flex: 8,
                                   child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _editingIndex = i;
-                                _englishNameController.text =
-                                    items[i]['name'] ?? "";
-                                _regionalNameController.text =
-                                    items[i]['regional_name'] ?? "";
-                                _r.text = items[i]['rate'] ?? "";
-                                _selectedUnit = items[i]['unit']!;
-                                _selectedColor =
-                                    items[i]['color'] ?? presetColors.first;
-                              });
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isEditing
-                                    ? (isDark
-                                          ? Colors.orange[900]!.withOpacity(0.3)
-                                          : Colors.orange[50])
-                                    : (items[i]['color'] != null
-                                          ? parseHexColor(items[i]['color'])
-                                          : (isDark
-                                                ? Colors.blueGrey[800]
-                                                : Colors.blueGrey[50])),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    formattedDisplayName,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14.5,
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black87,
+                                    onTap: () {
+                                      setState(() {
+                                        _editingIndex = i;
+                                        _englishNameController.text =
+                                            items[i]['name'] ?? "";
+                                        _regionalNameController.text =
+                                            items[i]['regional_name'] ?? "";
+                                        _r.text = items[i]['rate'] ?? "";
+                                        _selectedUnit = items[i]['unit']!;
+                                        _selectedColor =
+                                            items[i]['color'] ??
+                                            presetColors.first;
+                                      });
+                                    },
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: isEditing
+                                            ? (isDark
+                                                  ? Colors.orange[900]!
+                                                        .withOpacity(0.3)
+                                                  : Colors.orange[50])
+                                            : (items[i]['color'] != null
+                                                  ? parseHexColor(
+                                                      items[i]['color'],
+                                                    )
+                                                  : (isDark
+                                                        ? Colors.blueGrey[800]
+                                                        : Colors.blueGrey[50])),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            formattedDisplayName,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14.5,
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : Colors.black87,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            "₹${items[i]['rate']}/${items[i]['unit']}",
+                                            style: TextStyle(
+                                              color: items[i]['color'] != null
+                                                  ? Colors.black87
+                                                  : (isDark
+                                                        ? Colors.grey[300]
+                                                        : Colors.grey[700]),
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    "₹${items[i]['rate']}/${items[i]['unit']}",
-                                    style: TextStyle(
-                                      color: items[i]['color'] != null
-                                          ? Colors.black87
+                                ),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  flex: 2,
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isEditing
+                                          ? (isDark
+                                                ? Colors.blueGrey[900]
+                                                : Colors.grey[200])
                                           : (isDark
-                                                ? Colors.grey[300]
-                                                : Colors.grey[700]),
-                                      fontSize: 12,
+                                                ? Colors.red[900]!.withOpacity(
+                                                    0.4,
+                                                  )
+                                                : Colors.red[100]),
+                                    ),
+                                    onPressed: isEditing
+                                        ? null
+                                        : () async {
+                                            bool confirm = await _showWarning(
+                                              "ARE YOU SURE YOU WANT TO\nDELETE THIS ITEM?",
+                                            );
+                                            if (confirm) {
+                                              items.removeAt(i);
+                                              await LocalDatabase.saveToDisk();
+                                              setState(() {});
+                                            }
+                                          },
+                                    child: const Icon(
+                                      Icons.delete,
+                                      color: Colors.red,
+                                      size: 18,
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isEditing
-                                  ? (isDark
-                                        ? Colors.blueGrey[900]
-                                        : Colors.grey[200])
-                                  : (isDark
-                                        ? Colors.red[900]!.withOpacity(0.4)
-                                        : Colors.red[100]),
-                            ),
-                            onPressed: isEditing
-                                ? null
-                                : () async {
-                                    bool confirm = await _showWarning(
-                                      "ARE YOU SURE YOU WANT TO\nDELETE THIS ITEM?",
-                                    );
-                                    if (confirm) {
-                                      items.removeAt(i);
-                                      await LocalDatabase.saveToDisk();
-                                      setState(() {});
-                                    }
-                                  },
-                            child: const Icon(
-                              Icons.delete,
-                              color: Colors.red,
-                              size: 18,
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-              ],
-            ),
-          );
+                  );
                 },
               ),
             ),
@@ -5007,8 +5479,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final RegExp dateRegExp = RegExp(r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$');
-            
+            final RegExp dateRegExp = RegExp(
+              r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+            );
+
             bool isDateValid = dateRegExp.hasMatch(dateController.text.trim());
             bool isNameValid = nameController.text.trim().isNotEmpty;
             bool isBalanceValid = balanceController.text.trim().isNotEmpty;
@@ -5020,7 +5494,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
 
             return Dialog(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+                constraints: BoxConstraints(
+                  maxWidth: Platform.isWindows ? 400 : double.infinity,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(15.0),
                   child: Column(
@@ -5031,7 +5507,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
+                          color: isDark
+                              ? Colors.blueGrey[100]
+                              : Colors.blueGrey,
                         ),
                       ),
                       const SizedBox(height: 15),
@@ -5039,7 +5517,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         controller: nameController,
                         onChanged: (_) => checkFields(),
                         textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(hintText: "Name of Party"),
+                        decoration: const InputDecoration(
+                          hintText: "Name of Party",
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
@@ -5049,17 +5529,25 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         inputFormatters: [
                           FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
                         ],
-                        decoration: const InputDecoration(hintText: "OPENING DATE (DD-MM-YYYY)"),
+                        decoration: const InputDecoration(
+                          hintText: "OPENING DATE (DD-MM-YYYY)",
+                        ),
                       ),
                       const SizedBox(height: 10),
                       TextField(
                         controller: balanceController,
                         onChanged: (_) => checkFields(),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*\.?\d{0,2}'),
+                          ),
                         ],
-                        decoration: const InputDecoration(hintText: "OPENING BALANCE"),
+                        decoration: const InputDecoration(
+                          hintText: "OPENING BALANCE",
+                        ),
                       ),
                       const SizedBox(height: 15),
                       Row(
@@ -5069,20 +5557,52 @@ class _LedgerScreenState extends State<LedgerScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: isDebit ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800]) : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
-                                  foregroundColor: isDebit ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white : Colors.blueGrey[900]),
+                                  backgroundColor: isDebit
+                                      ? (isDark
+                                            ? Colors.blueGrey[200]
+                                            : Colors.blueGrey[800])
+                                      : (isDark
+                                            ? Colors.blueGrey[800]
+                                            : Colors.blueGrey[50]),
+                                  foregroundColor: isDebit
+                                      ? (isDark ? Colors.black : Colors.white)
+                                      : (isDark
+                                            ? Colors.white
+                                            : Colors.blueGrey[900]),
                                   elevation: isDebit ? 2 : 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    side: BorderSide(color: isDebit ? Colors.transparent : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200)),
+                                    side: BorderSide(
+                                      color: isDebit
+                                          ? Colors.transparent
+                                          : (isDark
+                                                ? Colors.blueGrey[700]!
+                                                : Colors.blueGrey.shade200),
+                                    ),
                                   ),
                                 ),
-                                onPressed: () => setDialogState(() => isDebit = true),
+                                onPressed: () =>
+                                    setDialogState(() => isDebit = true),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Text("DEBIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
-                                    if (isDebit) ...[const SizedBox(width: 4), Icon(Icons.check, size: 12, color: isDark ? Colors.black : Colors.white)],
+                                    const Text(
+                                      "DEBIT",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                    if (isDebit) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.check,
+                                        size: 12,
+                                        color: isDark
+                                            ? Colors.black
+                                            : Colors.white,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -5094,20 +5614,52 @@ class _LedgerScreenState extends State<LedgerScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: !isDebit ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800]) : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
-                                  foregroundColor: !isDebit ? (isDark ? Colors.black : Colors.white) : (isDark ? Colors.white : Colors.blueGrey[900]),
+                                  backgroundColor: !isDebit
+                                      ? (isDark
+                                            ? Colors.blueGrey[200]
+                                            : Colors.blueGrey[800])
+                                      : (isDark
+                                            ? Colors.blueGrey[800]
+                                            : Colors.blueGrey[50]),
+                                  foregroundColor: !isDebit
+                                      ? (isDark ? Colors.black : Colors.white)
+                                      : (isDark
+                                            ? Colors.white
+                                            : Colors.blueGrey[900]),
                                   elevation: !isDebit ? 2 : 0,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
-                                    side: BorderSide(color: !isDebit ? Colors.transparent : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200)),
+                                    side: BorderSide(
+                                      color: !isDebit
+                                          ? Colors.transparent
+                                          : (isDark
+                                                ? Colors.blueGrey[700]!
+                                                : Colors.blueGrey.shade200),
+                                    ),
                                   ),
                                 ),
-                                onPressed: () => setDialogState(() => isDebit = false),
+                                onPressed: () =>
+                                    setDialogState(() => isDebit = false),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Text("CREDIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10)),
-                                    if (!isDebit) ...[const SizedBox(width: 4), Icon(Icons.check, size: 12, color: isDark ? Colors.black : Colors.white)],
+                                    const Text(
+                                      "CREDIT",
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                    if (!isDebit) ...[
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.check,
+                                        size: 12,
+                                        color: isDark
+                                            ? Colors.black
+                                            : Colors.white,
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -5123,35 +5675,53 @@ class _LedgerScreenState extends State<LedgerScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: allValid ? Colors.green : Colors.grey.withOpacity(0.5),
-                                  foregroundColor: allValid ? Colors.white : Colors.white70,
+                                  backgroundColor: allValid
+                                      ? Colors.green
+                                      : Colors.grey.withOpacity(0.5),
+                                  foregroundColor: allValid
+                                      ? Colors.white
+                                      : Colors.white70,
                                 ),
-                                onPressed: !allValid ? null : () {
-                                  setState(() {
-                                    globalParties.add({
-                                      'name': nameController.text.trim(),
-                                      'opening_date': dateController.text.trim(),
-                                      'opening_balance': double.tryParse(balanceController.text.trim()) ?? 0.0,
-                                      'opening_type': isDebit ? 'debit' : 'credit',
-                                    });
-                                  });
-                                  LocalDatabase.savePartiesToDisk();
+                                onPressed: !allValid
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          globalParties.add({
+                                            'name': nameController.text.trim(),
+                                            'opening_date': dateController.text
+                                                .trim(),
+                                            'opening_balance':
+                                                double.tryParse(
+                                                  balanceController.text.trim(),
+                                                ) ??
+                                                0.0,
+                                            'opening_type': isDebit
+                                                ? 'debit'
+                                                : 'credit',
+                                          });
+                                        });
+                                        LocalDatabase.savePartiesToDisk();
 
-                                  nameController.clear();
-                                  dateController.clear();
-                                  balanceController.clear();
-                                  checkFields();
+                                        nameController.clear();
+                                        dateController.clear();
+                                        balanceController.clear();
+                                        checkFields();
 
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Party added successfully!"),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                },
+                                        messenger.showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              "Party added successfully!",
+                                            ),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      },
                                 child: const Text(
                                   "ADD PARTY",
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                             ),
@@ -5171,18 +5741,30 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                       context: context,
                                       builder: (context) => AlertDialog(
                                         title: const Text("Warning"),
-                                        content: const Text("You have un-saved party details filled in. Are you sure you want to close?"),
+                                        content: const Text(
+                                          "You have un-saved party details filled in. Are you sure you want to close?",
+                                        ),
                                         actions: [
                                           TextButton(
-                                            onPressed: () => Navigator.pop(context),
+                                            onPressed: () =>
+                                                Navigator.pop(context),
                                             child: const Text("NO"),
                                           ),
                                           TextButton(
                                             onPressed: () {
-                                              Navigator.pop(context); // close warning
-                                              Navigator.pop(context); // close party popup
+                                              Navigator.pop(
+                                                context,
+                                              ); // close warning
+                                              Navigator.pop(
+                                                context,
+                                              ); // close party popup
                                             },
-                                            child: const Text("YES, CLOSE", style: TextStyle(color: Colors.red)),
+                                            child: const Text(
+                                              "YES, CLOSE",
+                                              style: TextStyle(
+                                                color: Colors.red,
+                                              ),
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -5193,7 +5775,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                 },
                                 child: const Text(
                                   "CLOSE",
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                             ),
@@ -5252,7 +5837,10 @@ class _LedgerScreenState extends State<LedgerScreen> {
                     icon: const Icon(Icons.add_circle),
                     label: const Text(
                       "ADD PARTY",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
                 ),
@@ -5283,127 +5871,165 @@ class _LedgerScreenState extends State<LedgerScreen> {
           Expanded(
             child: filteredParties.isEmpty
                 ? Center(
-                    child: Text(_searchQuery.isNotEmpty 
-                        ? "No parties match your search." 
-                        : "No parties found. Click ADD PARTY above."),
+                    child: Text(
+                      _searchQuery.isNotEmpty
+                          ? "No parties match your search."
+                          : "No parties found. Click ADD PARTY above.",
+                    ),
                   )
                 : ReorderableListView.builder(
                     buildDefaultDragHandles: false,
-              itemCount: filteredParties.length,
-              onReorder: _onReorderParties,
-              itemBuilder: (context, i) {
-                final party = filteredParties[i];
-                final pName = party['name'] ?? "Unknown";
-                final isDark = Theme.of(context).brightness == Brightness.dark;
-                
-                // Find original global index for display if needed, but we can just use `i` for visual list rank, or global rank.
-                // It makes sense to display the global rank number even when searching.
-                final globalIndex = globalParties.indexOf(party);
-                
-                return Padding(
-                  key: ValueKey("party_row_${globalIndex}_$pName"),
-                  padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          _searchQuery.isNotEmpty 
-                              ? const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 4.0),
-                                  child: Icon(Icons.menu, color: Colors.grey),
-                                )
-                              : ReorderableDragStartListener(
-                                  index: i,
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 4.0),
-                                    child: Icon(Icons.menu, color: Colors.orange),
+                    itemCount: filteredParties.length,
+                    onReorder: _onReorderParties,
+                    itemBuilder: (context, i) {
+                      final party = filteredParties[i];
+                      final pName = party['name'] ?? "Unknown";
+                      final isDark =
+                          Theme.of(context).brightness == Brightness.dark;
+
+                      // Find original global index for display if needed, but we can just use `i` for visual list rank, or global rank.
+                      // It makes sense to display the global rank number even when searching.
+                      final globalIndex = globalParties.indexOf(party);
+
+                      return Padding(
+                        key: ValueKey("party_row_${globalIndex}_$pName"),
+                        padding: const EdgeInsets.only(
+                          top: 8.0,
+                          left: 8.0,
+                          right: 8.0,
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              children: [
+                                _searchQuery.isNotEmpty
+                                    ? const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: 4.0,
+                                        ),
+                                        child: Icon(
+                                          Icons.menu,
+                                          color: Colors.grey,
+                                        ),
+                                      )
+                                    : ReorderableDragStartListener(
+                                        index: i,
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 4.0,
+                                          ),
+                                          child: Icon(
+                                            Icons.menu,
+                                            color: Colors.orange,
+                                          ),
+                                        ),
+                                      ),
+                                Container(
+                                  margin: const EdgeInsets.only(
+                                    right: 8.0,
+                                    left: 4.0,
+                                  ),
+                                  width: 28,
+                                  height: 28,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.blueGrey[800]
+                                        : Colors.blueGrey[200],
+                                    shape: BoxShape.circle,
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    "${globalIndex + 1}",
+                                    style: TextStyle(
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.blueGrey[900],
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
-                          Container(
-                            margin: const EdgeInsets.only(right: 8.0, left: 4.0),
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[200],
-                              shape: BoxShape.circle,
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              "${globalIndex + 1}",
-                              style: TextStyle(
-                                color: isDark ? Colors.white : Colors.blueGrey[900],
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 8,
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => PartyLedgerScreen(partyIndex: globalIndex),
-                                  ),
-                                ).then((_) => setState(() {}));
-                              },
-                              child: Container(
-                                height: 48,
-                                decoration: BoxDecoration(
-                                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                alignment: Alignment.centerLeft,
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                child: Text(
-                                  pName,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: SizedBox(
-                              height: 48,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  backgroundColor: isDark
-                                      ? Colors.red[900]!.withOpacity(0.4)
-                                      : Colors.red[100],
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                Expanded(
+                                  flex: 8,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              PartyLedgerScreen(
+                                                partyIndex: globalIndex,
+                                              ),
+                                        ),
+                                      ).then((_) => setState(() {}));
+                                    },
+                                    child: Container(
+                                      height: 48,
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? Colors.blueGrey[800]
+                                            : Colors.blueGrey[50],
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      alignment: Alignment.centerLeft,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16.0,
+                                      ),
+                                      child: Text(
+                                        pName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                                onPressed: () async {
-                                  bool confirm = await _showWarning(
-                                    "Are you sure you want to delete '$pName'? This action cannot be undone.",
-                                  );
-                                  if (confirm) {
-                                    setState(() {
-                                      globalParties.remove(party);
-                                    });
-                                    await LocalDatabase.savePartiesToDisk();
-                                  }
-                                },
-                                child: const Icon(Icons.delete, color: Colors.red),
-                              ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: SizedBox(
+                                    height: 48,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        backgroundColor: isDark
+                                            ? Colors.red[900]!.withOpacity(0.4)
+                                            : Colors.red[100],
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: () async {
+                                        bool confirm = await _showWarning(
+                                          "Are you sure you want to delete '$pName'? This action cannot be undone.",
+                                        );
+                                        if (confirm) {
+                                          setState(() {
+                                            globalParties.remove(party);
+                                          });
+                                          await LocalDatabase.savePartiesToDisk();
+                                        }
+                                      },
+                                      child: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(height: 1, thickness: 1),
-                    ],
+                            const SizedBox(height: 8),
+                            const Divider(height: 1, thickness: 1),
+                          ],
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -5437,7 +6063,20 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   Map<String, dynamic>? _editingTransaction;
   bool _isEditingOpening = false;
 
-  static const _months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  static const _months = [
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+  ];
 
   Widget _buildToggleBtn(String label, bool isSelected) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -5475,7 +6114,11 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
             ),
             if (isSelected) ...[
               const SizedBox(width: 1),
-              Icon(Icons.check, size: 10, color: isDark ? Colors.black : Colors.white),
+              Icon(
+                Icons.check,
+                size: 10,
+                color: isDark ? Colors.black : Colors.white,
+              ),
             ],
           ],
         ),
@@ -5487,7 +6130,11 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     try {
       final parts = dateStr.split('-');
       if (parts.length != 3) return null;
-      return DateTime(int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+      return DateTime(
+        int.parse(parts[2]),
+        int.parse(parts[1]),
+        int.parse(parts[0]),
+      );
     } catch (e) {
       return null;
     }
@@ -5499,33 +6146,59 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       builder: (context) {
         return Dialog(
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+            constraints: BoxConstraints(
+              maxWidth: Platform.isWindows ? 400 : double.infinity,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(15.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 40),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.amber,
+                    size: 40,
+                  ),
                   const SizedBox(height: 10),
-                  const Text("UNSAVED CHANGES", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+                  const Text(
+                    "UNSAVED CHANGES",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.red,
+                    ),
+                  ),
                   const SizedBox(height: 15),
-                  const Text("You have unsaved changes. Are you sure you want to close without saving?", textAlign: TextAlign.center),
+                  const Text(
+                    "You have unsaved changes. Are you sure you want to close without saving?",
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 20),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                          ),
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text("CANCEL", style: TextStyle(color: Colors.white)),
+                          child: const Text(
+                            "CANCEL",
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                          ),
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text("DISCARD", style: TextStyle(color: Colors.white)),
+                          child: const Text(
+                            "DISCARD",
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
                       ),
                     ],
@@ -5540,29 +6213,341 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     return result ?? false;
   }
 
-  void _showDeleteTransactionDialog(Map<String, dynamic> party, Map<String, dynamic> transactionToRemove) {
+  Future<void> _generateLedgerPDF({
+    required Map<String, dynamic> party,
+    required List<dynamic> displayedTransactions,
+    required bool isOriginalOpening,
+    required double displayOpeningVal,
+    required String displayOpeningType,
+    required String displayOpeningDate,
+    required bool isBeforePartyOpening,
+    required double totalDebit,
+    required double totalCredit,
+    required double grandTotal,
+    required bool isDebitBigger,
+  }) async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    final displayDate = DateFormat('dd-MM-yyyy hh:mm a').format(now);
+    final timeStampFormat = DateFormat('yyyyMMdd_HHmmss').format(now);
+
+    final String partyName = party['name'] ?? 'Unknown';
+    final cleanCustomerName = partyName
+        .replaceAll(RegExp(r'[^\w\s\-]'), '')
+        .replaceAll(' ', '_');
+    final finalFileName = "${timeStampFormat}_$cleanCustomerName";
+
+    List<pw.TableRow> tableRows = [];
+
+    tableRows.add(
+      pw.TableRow(
+        children: [
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(5),
+            child: pw.Text(
+              'SR NO.',
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(5),
+            child: pw.Text(
+              'DATE',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(5),
+            child: pw.Text(
+              'DEBIT',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(5),
+            child: pw.Text(
+              'CREDIT',
+              textAlign: pw.TextAlign.center,
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!isBeforePartyOpening) {
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text('OPENING'),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text(
+                displayOpeningDate,
+                textAlign: pw.TextAlign.center,
+              ),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text(
+                (displayOpeningType == 'debit' && displayOpeningVal > 0)
+                    ? displayOpeningVal.toStringAsFixed(2)
+                    : '',
+                textAlign: pw.TextAlign.center,
+              ),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text(
+                (displayOpeningType == 'credit' && displayOpeningVal > 0)
+                    ? displayOpeningVal.toStringAsFixed(2)
+                    : '',
+                textAlign: pw.TextAlign.center,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    for (int i = 0; i < displayedTransactions.length; i++) {
+      final t = displayedTransactions[i];
+      final date = t['date'] ?? '';
+      final debitVal = t['debit'] ?? 0.0;
+      final creditVal = t['credit'] ?? 0.0;
+      final debitStr = debitVal > 0 ? debitVal.toStringAsFixed(2) : '';
+      final creditStr = creditVal > 0 ? creditVal.toStringAsFixed(2) : '';
+      int displayIndex = isBeforePartyOpening ? i : i + 1;
+
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text('$displayIndex'),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text(date, textAlign: pw.TextAlign.center),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text(debitStr, textAlign: pw.TextAlign.center),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(5),
+              child: pw.Text(creditStr, textAlign: pw.TextAlign.center),
+            ),
+          ],
+        ),
+      );
+    }
+
+    String gtLabel = totalDebit == totalCredit
+        ? "0.00"
+        : "${isDebitBigger ? 'DEBIT' : 'CREDIT'} - ${grandTotal.toStringAsFixed(2)}";
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return [
+            pw.Center(
+              child: pw.Text(
+                globalShopName.toUpperCase(),
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 30),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  "NAME - $partyName",
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Text(
+                  "DATE - $displayDate",
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 10),
+            pw.Table(
+              border: pw.TableBorder.all(),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(2.0),
+                1: const pw.FlexColumnWidth(3.0),
+                2: const pw.FlexColumnWidth(2.5),
+                3: const pw.FlexColumnWidth(2.5),
+              },
+              children: tableRows,
+            ),
+            pw.Table(
+              border: pw.TableBorder(
+                left: const pw.BorderSide(),
+                right: const pw.BorderSide(),
+                bottom: const pw.BorderSide(),
+                verticalInside: const pw.BorderSide(),
+              ),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(5.0),
+                1: const pw.FlexColumnWidth(2.5),
+                2: const pw.FlexColumnWidth(2.5),
+              },
+              children: [
+                pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        'TOTAL :-',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        totalDebit.toStringAsFixed(2),
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        totalCredit.toStringAsFixed(2),
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.Table(
+              border: pw.TableBorder(
+                left: const pw.BorderSide(),
+                right: const pw.BorderSide(),
+                bottom: const pw.BorderSide(),
+                verticalInside: const pw.BorderSide(),
+              ),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(5.0),
+                1: const pw.FlexColumnWidth(5.0),
+              },
+              children: [
+                pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        'GRAND TOTAL :-',
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(5),
+                      child: pw.Text(
+                        gtLabel,
+                        textAlign: pw.TextAlign.center,
+                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    if (Platform.isWindows) {
+      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String dir = "$baseDir\\Billing APP\\ACCOUNTS";
+      Directory(dir).createSync(recursive: true);
+      File file = File("$dir\\$finalFileName.pdf");
+      await file.writeAsBytes(await pdf.save());
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
+      }
+      return;
+    }
+
+    final pathUri = await LocalDatabase.getAccountsFolderUri();
+    if (pathUri != null) {
+      await saf.createFileAsBytes(
+        pathUri,
+        mimeType: 'application/pdf',
+        displayName: "$finalFileName.pdf",
+        bytes: await pdf.save(),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
+      }
+    }
+  }
+
+  void _showDeleteTransactionDialog(
+    Map<String, dynamic> party,
+    Map<String, dynamic> transactionToRemove,
+  ) {
     showDialog(
       context: context,
       builder: (context) {
         return Dialog(
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+            constraints: BoxConstraints(
+              maxWidth: Platform.isWindows ? 400 : double.infinity,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(15.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 40),
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.amber,
+                    size: 40,
+                  ),
                   const SizedBox(height: 10),
-                  const Text("WARNING", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+                  const Text(
+                    "WARNING",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.red,
+                    ),
+                  ),
                   const SizedBox(height: 15),
-                  const Text("Are you sure you want to delete this transaction?", textAlign: TextAlign.center),
+                  const Text(
+                    "Are you sure you want to delete this transaction?",
+                    textAlign: TextAlign.center,
+                  ),
                   const SizedBox(height: 20),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                          ),
                           onPressed: () async {
                             setState(() {
                               List tList = party['transactions'];
@@ -5571,15 +6556,29 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                             await LocalDatabase.savePartiesToDisk();
                             Navigator.pop(context);
                           },
-                          child: const Text("YES, DELETE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            "YES, DELETE",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                          ),
                           onPressed: () => Navigator.pop(context),
-                          child: const Text("CANCEL", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            "CANCEL",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -5602,10 +6601,15 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final RegExp dateRegExp = RegExp(r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$');
-            bool isValid = fromCtrl.text.isNotEmpty && toCtrl.text.isNotEmpty &&
-                           dateRegExp.hasMatch(fromCtrl.text.trim()) && dateRegExp.hasMatch(toCtrl.text.trim());
-            
+            final RegExp dateRegExp = RegExp(
+              r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+            );
+            bool isValid =
+                fromCtrl.text.isNotEmpty &&
+                toCtrl.text.isNotEmpty &&
+                dateRegExp.hasMatch(fromCtrl.text.trim()) &&
+                dateRegExp.hasMatch(toCtrl.text.trim());
+
             if (isValid) {
               DateTime? fromD = _parseDate(fromCtrl.text.trim());
               DateTime? toD = _parseDate(toCtrl.text.trim());
@@ -5616,59 +6620,93 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
             return Dialog(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+                constraints: BoxConstraints(
+                  maxWidth: Platform.isWindows ? 400 : double.infinity,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(15.0),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: fromCtrl,
-                      onChanged: (_) => setDialogState(() {}),
-                      keyboardType: TextInputType.datetime,
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]'))],
-                      decoration: const InputDecoration(hintText: "FROM (In DD-MM-YYYY)"),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: toCtrl,
-                      onChanged: (_) => setDialogState(() {}),
-                      keyboardType: TextInputType.datetime,
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]'))],
-                      decoration: const InputDecoration(hintText: "TO (In DD-MM-YYYY)"),
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: isValid ? Colors.green : Colors.grey),
-                            onPressed: !isValid ? null : () {
-                              setState(() {
-                                _isCustomMode = true;
-                                _customFrom = _parseDate(fromCtrl.text.trim());
-                                _customTo = _parseDate(toCtrl.text.trim());
-                              });
-                              Navigator.pop(context);
-                            },
-                            child: const Text("NEXT", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: fromCtrl,
+                        onChanged: (_) => setDialogState(() {}),
+                        keyboardType: TextInputType.datetime,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: "FROM (In DD-MM-YYYY)",
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text("CLOSE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: toCtrl,
+                        onChanged: (_) => setDialogState(() {}),
+                        keyboardType: TextInputType.datetime,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: "TO (In DD-MM-YYYY)",
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isValid
+                                    ? Colors.green
+                                    : Colors.grey,
+                              ),
+                              onPressed: !isValid
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _isCustomMode = true;
+                                        _customFrom = _parseDate(
+                                          fromCtrl.text.trim(),
+                                        );
+                                        _customTo = _parseDate(
+                                          toCtrl.text.trim(),
+                                        );
+                                      });
+                                      Navigator.pop(context);
+                                    },
+                              child: const Text(
+                                "NEXT",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text(
+                                "CLOSE",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
+            );
           },
         );
       },
@@ -5685,7 +6723,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       party['transactions'] = <Map<String, dynamic>>[];
     }
     List transactions = party['transactions'];
-    
+
     transactions.sort((a, b) {
       DateTime d1 = _parseDate(a['date'] ?? '') ?? DateTime(1900);
       DateTime d2 = _parseDate(b['date'] ?? '') ?? DateTime(1900);
@@ -5697,35 +6735,42 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
     double runningTotalDebit = 0.0;
     double runningTotalCredit = 0.0;
-    
+
     final double ob = (party['opening_balance'] ?? 0.0).toDouble();
     final String ot = party['opening_type'] ?? 'debit';
-    
+
     bool isBeforePartyOpening = false;
     if (_isAllMode) {
       isBeforePartyOpening = false;
     } else if (!_isCustomMode) {
-      isBeforePartyOpening = _viewYear < partyOpenDate.year || (_viewYear == partyOpenDate.year && _viewMonth < partyOpenDate.month);
+      isBeforePartyOpening =
+          _viewYear < partyOpenDate.year ||
+          (_viewYear == partyOpenDate.year && _viewMonth < partyOpenDate.month);
     } else {
-      isBeforePartyOpening = _customTo != null && _customTo!.isBefore(partyOpenDate);
+      isBeforePartyOpening =
+          _customTo != null && _customTo!.isBefore(partyOpenDate);
     }
-    
+
     bool isOriginalOpening = false;
     if (_isAllMode) {
       isOriginalOpening = true;
     } else if (!_isCustomMode) {
-      isOriginalOpening = _viewMonth == partyOpenDate.month && _viewYear == partyOpenDate.year;
+      isOriginalOpening =
+          _viewMonth == partyOpenDate.month && _viewYear == partyOpenDate.year;
     } else {
-      isOriginalOpening = _customFrom != null && !_customFrom!.isAfter(partyOpenDate);
+      isOriginalOpening =
+          _customFrom != null && !_customFrom!.isAfter(partyOpenDate);
     }
 
     if (!isBeforePartyOpening && !isOriginalOpening) {
-      if (ot == 'debit') runningTotalDebit += ob;
-      else runningTotalCredit += ob;
+      if (ot == 'debit')
+        runningTotalDebit += ob;
+      else
+        runningTotalCredit += ob;
     }
 
     List displayedTransactions = [];
-    
+
     for (var t in transactions) {
       DateTime? d = _parseDate(t['date'] ?? '');
       if (d == null) continue;
@@ -5740,7 +6785,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
           displayedTransactions.add(t);
         }
       } else {
-        if (d.year < _viewYear || (d.year == _viewYear && d.month < _viewMonth)) {
+        if (d.year < _viewYear ||
+            (d.year == _viewYear && d.month < _viewMonth)) {
           runningTotalDebit += (t['debit'] ?? 0.0);
           runningTotalCredit += (t['credit'] ?? 0.0);
         } else if (d.year == _viewYear && d.month == _viewMonth) {
@@ -5750,16 +6796,20 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     }
 
     double carryForwardVal = (runningTotalDebit - runningTotalCredit).abs();
-    String carryForwardType = runningTotalDebit >= runningTotalCredit ? 'debit' : 'credit';
+    String carryForwardType = runningTotalDebit >= runningTotalCredit
+        ? 'debit'
+        : 'credit';
 
     String displayOpeningDate = '';
     if (isOriginalOpening) {
       displayOpeningDate = party['opening_date'] ?? '';
     } else {
       if (_isCustomMode) {
-        displayOpeningDate = "${_customFrom!.day.toString().padLeft(2, '0')}-${_customFrom!.month.toString().padLeft(2, '0')}-${_customFrom!.year}";
+        displayOpeningDate =
+            "${_customFrom!.day.toString().padLeft(2, '0')}-${_customFrom!.month.toString().padLeft(2, '0')}-${_customFrom!.year}";
       } else {
-        displayOpeningDate = '01-${_viewMonth.toString().padLeft(2, '0')}-$_viewYear';
+        displayOpeningDate =
+            '01-${_viewMonth.toString().padLeft(2, '0')}-$_viewYear';
       }
     }
 
@@ -5769,9 +6819,11 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     double totalDebit = 0.0;
     double totalCredit = 0.0;
     if (!isBeforePartyOpening) {
-      if (displayOpeningType == 'debit') totalDebit += displayOpeningVal;
-      else totalCredit += displayOpeningVal;
-      
+      if (displayOpeningType == 'debit')
+        totalDebit += displayOpeningVal;
+      else
+        totalCredit += displayOpeningVal;
+
       for (var t in displayedTransactions) {
         totalDebit += (t['debit'] ?? 0.0);
         totalCredit += (t['credit'] ?? 0.0);
@@ -5780,19 +6832,25 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
     double grandTotal = (totalDebit - totalCredit).abs();
     bool isDebitBigger = totalDebit >= totalCredit;
-    Color grandTotalColor = totalDebit == totalCredit 
-        ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black) 
+    Color grandTotalColor = totalDebit == totalCredit
+        ? (Theme.of(context).brightness == Brightness.dark
+              ? Colors.white
+              : Colors.black)
         : (isDebitBigger ? Colors.green : Colors.red);
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     bool isValidAdd = false;
     if (_amountCtrl.text.isNotEmpty && _dateCtrl.text.isNotEmpty) {
-      final RegExp dateRegExp = RegExp(r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$');
+      final RegExp dateRegExp = RegExp(
+        r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+      );
       if (dateRegExp.hasMatch(_dateCtrl.text.trim())) {
         DateTime? enteredDate = _parseDate(_dateCtrl.text.trim());
         DateTime? openingDate = _parseDate(party['opening_date'] ?? "");
-        if (enteredDate != null && openingDate != null && !enteredDate.isBefore(openingDate)) {
+        if (enteredDate != null &&
+            openingDate != null &&
+            !enteredDate.isBefore(openingDate)) {
           isValidAdd = true;
         }
       }
@@ -5803,23 +6861,35 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     String currentDate = _dateCtrl.text.trim();
 
     if (_isEditingOpening) {
-      double origAmt = double.tryParse(party['opening_balance']?.toString() ?? "0.0") ?? 0.0;
+      double origAmt =
+          double.tryParse(party['opening_balance']?.toString() ?? "0.0") ?? 0.0;
       String origDate = party['opening_date'] ?? '';
       bool origIsDebit = (party['opening_type'] ?? 'credit') == 'debit';
-      if (currentAmt != origAmt || currentDate != origDate || _isDebit != origIsDebit) {
+      if (currentAmt != origAmt ||
+          currentDate != origDate ||
+          _isDebit != origIsDebit) {
         isFormChanged = true;
       }
     } else if (_editingTransaction != null) {
-      double origDebit = double.tryParse(_editingTransaction!['debit']?.toString() ?? "0.0") ?? 0.0;
-      double origCredit = double.tryParse(_editingTransaction!['credit']?.toString() ?? "0.0") ?? 0.0;
+      double origDebit =
+          double.tryParse(_editingTransaction!['debit']?.toString() ?? "0.0") ??
+          0.0;
+      double origCredit =
+          double.tryParse(
+            _editingTransaction!['credit']?.toString() ?? "0.0",
+          ) ??
+          0.0;
       String origDate = _editingTransaction!['date'] ?? '';
       bool origIsDebit = origDebit > 0;
       double origAmt = origDebit > 0 ? origDebit : origCredit;
-      if (currentAmt != origAmt || currentDate != origDate || _isDebit != origIsDebit) {
+      if (currentAmt != origAmt ||
+          currentDate != origDate ||
+          _isDebit != origIsDebit) {
         isFormChanged = true;
       }
     } else {
-      if (_amountCtrl.text.trim().isNotEmpty || _dateCtrl.text.trim().isNotEmpty) {
+      if (_amountCtrl.text.trim().isNotEmpty ||
+          _dateCtrl.text.trim().isNotEmpty) {
         isFormChanged = true;
       }
     }
@@ -5850,465 +6920,935 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
               }
             },
           ),
-        title: const Text(
-          "LEDGER",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 10),
-          Text(
-            "NAME - $pName",
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          title: const Text(
+            "LEDGER",
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 15),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 30,
-                  child: SizedBox(
-                    height: 45,
+        ),
+        body: Column(
+          children: [
+            const SizedBox(height: 10),
+            Text(
+              "NAME - $pName",
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 15),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 30,
+                    child: SizedBox(
+                      height: 45,
+                      child: TextField(
+                        controller: _amountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'^\d*\.?\d{0,2}'),
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: "AMOUNT",
+                          hintStyle: TextStyle(fontSize: 10),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 0,
+                          ),
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    flex: 30,
                     child: TextField(
-                      controller: _amountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      controller: _dateCtrl,
+                      onChanged: (_) => setState(() {}),
+                      keyboardType: TextInputType.datetime,
                       inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
                       ],
                       decoration: const InputDecoration(
-                        hintText: "AMOUNT",
+                        hintText: "DATE",
                         hintStyle: TextStyle(fontSize: 10),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 0,
+                        ),
                         border: OutlineInputBorder(),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  flex: 30,
-                  child: TextField(
-                    controller: _dateCtrl,
-                    onChanged: (_) => setState(() {}),
-                    keyboardType: TextInputType.datetime,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
-                    ],
-                    decoration: const InputDecoration(
-                      hintText: "DATE",
-                      hintStyle: TextStyle(fontSize: 10),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                      border: OutlineInputBorder(),
+                  const SizedBox(width: 4),
+                  Expanded(flex: 15, child: _buildToggleBtn("DEBIT", _isDebit)),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    flex: 15,
+                    child: _buildToggleBtn("CREDIT", !_isDebit),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    flex: 10,
+                    child: SizedBox(
+                      height: 45,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: canSave
+                              ? Colors.green
+                              : Colors.grey.withOpacity(0.5),
+                          foregroundColor: canSave
+                              ? Colors.white
+                              : Colors.white70,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: !canSave
+                            ? null
+                            : () async {
+                                setState(() {
+                                  if (_isEditingOpening) {
+                                    party['opening_balance'] =
+                                        double.tryParse(
+                                          _amountCtrl.text.trim(),
+                                        ) ??
+                                        0.0;
+                                    party['opening_date'] = _dateCtrl.text
+                                        .trim();
+                                    party['opening_type'] = _isDebit
+                                        ? 'debit'
+                                        : 'credit';
+                                  } else if (_editingTransaction != null) {
+                                    _editingTransaction!['date'] = _dateCtrl
+                                        .text
+                                        .trim();
+                                    _editingTransaction!['debit'] = _isDebit
+                                        ? (double.tryParse(
+                                                _amountCtrl.text.trim(),
+                                              ) ??
+                                              0.0)
+                                        : 0.0;
+                                    _editingTransaction!['credit'] = !_isDebit
+                                        ? (double.tryParse(
+                                                _amountCtrl.text.trim(),
+                                              ) ??
+                                              0.0)
+                                        : 0.0;
+
+                                    transactions.sort((a, b) {
+                                      DateTime dateA =
+                                          _parseDate(a['date'] ?? "") ??
+                                          DateTime(1970);
+                                      DateTime dateB =
+                                          _parseDate(b['date'] ?? "") ??
+                                          DateTime(1970);
+                                      return dateA.compareTo(dateB);
+                                    });
+                                  } else {
+                                    transactions.add({
+                                      'date': _dateCtrl.text.trim(),
+                                      'debit': _isDebit
+                                          ? (double.tryParse(
+                                                  _amountCtrl.text.trim(),
+                                                ) ??
+                                                0.0)
+                                          : 0.0,
+                                      'credit': !_isDebit
+                                          ? (double.tryParse(
+                                                  _amountCtrl.text.trim(),
+                                                ) ??
+                                                0.0)
+                                          : 0.0,
+                                    });
+                                    transactions.sort((a, b) {
+                                      DateTime dateA =
+                                          _parseDate(a['date'] ?? "") ??
+                                          DateTime(1970);
+                                      DateTime dateB =
+                                          _parseDate(b['date'] ?? "") ??
+                                          DateTime(1970);
+                                      return dateA.compareTo(dateB);
+                                    });
+                                  }
+                                  _amountCtrl.clear();
+                                  _dateCtrl.clear();
+                                  _editingTransaction = null;
+                                  _isEditingOpening = false;
+                                });
+                                await LocalDatabase.savePartiesToDisk();
+                              },
+                        child: Icon(
+                          (_editingTransaction != null || _isEditingOpening)
+                              ? Icons.save
+                              : Icons.add,
+                          size: 20,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  flex: 15,
-                  child: _buildToggleBtn("DEBIT", _isDebit),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  flex: 15,
-                  child: _buildToggleBtn("CREDIT", !_isDebit),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  flex: 10,
-                  child: SizedBox(
-                    height: 45,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        backgroundColor: canSave ? Colors.green : Colors.grey.withOpacity(0.5),
-                        foregroundColor: canSave ? Colors.white : Colors.white70,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 15),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8.0,
+                vertical: 4.0,
+              ),
+              color: isDark ? Colors.blueGrey[900] : Colors.blueGrey[200],
+              child: _isCustomMode
+                  ? Row(
+                      children: [
+                        Text(
+                          "CUSTOM RANGE : FROM ${_customFrom!.day.toString().padLeft(2, '0')}-${_customFrom!.month.toString().padLeft(2, '0')}-${_customFrom!.year} TO ${_customTo!.day.toString().padLeft(2, '0')}-${_customTo!.month.toString().padLeft(2, '0')}-${_customTo!.year}",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () {
+                            setState(() {
+                              _isCustomMode = false;
+                              _viewMonth = DateTime.now().month;
+                              _viewYear = DateTime.now().year;
+                            });
+                          },
+                        ),
+                      ],
+                    )
+                  : _isAllMode
+                  ? Row(
+                      children: [
+                        const Text(
+                          "ALL TRANSACTIONS",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () {
+                            setState(() {
+                              _isAllMode = false;
+                              _viewMonth = DateTime.now().month;
+                              _viewYear = DateTime.now().year;
+                            });
+                          },
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          child: FittedBox(
+                            alignment: Alignment.centerLeft,
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              "CURRENT MONTH : ${_months[_viewMonth - 1]} $_viewYear",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: Platform.isWindows
+                                ? const EdgeInsets.symmetric(horizontal: 8)
+                                : const EdgeInsets.all(8),
+                            minimumSize: Platform.isWindows
+                                ? Size.zero
+                                : const Size(40, 40),
+                            tapTargetSize: Platform.isWindows
+                                ? MaterialTapTargetSize.shrinkWrap
+                                : MaterialTapTargetSize.padded,
+                            foregroundColor:
+                                (_viewYear == partyOpenDate.year &&
+                                    _viewMonth == partyOpenDate.month)
+                                ? Colors.grey
+                                : (isDark ? Colors.white : Colors.black),
+                          ),
+                          onPressed:
+                              (_viewYear == partyOpenDate.year &&
+                                  _viewMonth == partyOpenDate.month)
+                              ? null
+                              : () {
+                                  setState(() {
+                                    if (_viewMonth == 1) {
+                                      _viewMonth = 12;
+                                      _viewYear--;
+                                    } else {
+                                      _viewMonth--;
+                                    }
+                                  });
+                                },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.arrow_back_ios,
+                                size: 14,
+                                color:
+                                    (_viewYear == partyOpenDate.year &&
+                                        _viewMonth == partyOpenDate.month)
+                                    ? Colors.grey
+                                    : null,
+                              ),
+                              if (Platform.isWindows)
+                                const Text(
+                                  " PREVIOUS MONTH",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: Platform.isWindows
+                                ? const EdgeInsets.symmetric(horizontal: 8)
+                                : const EdgeInsets.all(8),
+                            minimumSize: Platform.isWindows
+                                ? Size.zero
+                                : const Size(40, 40),
+                            tapTargetSize: Platform.isWindows
+                                ? MaterialTapTargetSize.shrinkWrap
+                                : MaterialTapTargetSize.padded,
+                            foregroundColor:
+                                (_viewYear == DateTime.now().year &&
+                                    _viewMonth == DateTime.now().month)
+                                ? Colors.grey
+                                : (isDark ? Colors.white : Colors.black),
+                          ),
+                          onPressed:
+                              (_viewYear == DateTime.now().year &&
+                                  _viewMonth == DateTime.now().month)
+                              ? null
+                              : () {
+                                  setState(() {
+                                    if (_viewMonth == 12) {
+                                      _viewMonth = 1;
+                                      _viewYear++;
+                                    } else {
+                                      _viewMonth++;
+                                    }
+                                  });
+                                },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (Platform.isWindows)
+                                const Text(
+                                  "NEXT MONTH ",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                size: 14,
+                                color:
+                                    (_viewYear == DateTime.now().year &&
+                                        _viewMonth == DateTime.now().month)
+                                    ? Colors.grey
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _isAllMode = true;
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: const Size(0, 30),
+                          ),
+                          child: const Text(
+                            "ALL",
+                            style: TextStyle(fontSize: 10),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        ElevatedButton(
+                          onPressed: _showCustomRangePopup,
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: const Size(0, 30),
+                          ),
+                          child: const Text(
+                            "CUSTOM",
+                            style: TextStyle(fontSize: 10),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () {
+                            setState(() {
+                              _viewMonth = DateTime.now().month;
+                              _viewYear = DateTime.now().year;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+            ),
+            Container(
+              color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[100],
+              padding: const EdgeInsets.symmetric(
+                vertical: 12.0,
+                horizontal: 8.0,
+              ),
+              child: Row(
+                children: const [
+                  Expanded(
+                    flex: 10,
+                    child: Text(
+                      "SR NO.",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
                       ),
-                      onPressed: !canSave ? null : () async {
-                        setState(() {
-                          if (_isEditingOpening) {
-                            party['opening_balance'] = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
-                            party['opening_date'] = _dateCtrl.text.trim();
-                            party['opening_type'] = _isDebit ? 'debit' : 'credit';
-                          } else if (_editingTransaction != null) {
-                            _editingTransaction!['date'] = _dateCtrl.text.trim();
-                            _editingTransaction!['debit'] = _isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0;
-                            _editingTransaction!['credit'] = !_isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0;
-                            
-                            transactions.sort((a, b) {
-                              DateTime dateA = _parseDate(a['date'] ?? "") ?? DateTime(1970);
-                              DateTime dateB = _parseDate(b['date'] ?? "") ?? DateTime(1970);
-                              return dateA.compareTo(dateB);
-                            });
-                          } else {
-                            transactions.add({
-                              'date': _dateCtrl.text.trim(),
-                              'debit': _isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0,
-                              'credit': !_isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0,
-                            });
-                            transactions.sort((a, b) {
-                              DateTime dateA = _parseDate(a['date'] ?? "") ?? DateTime(1970);
-                              DateTime dateB = _parseDate(b['date'] ?? "") ?? DateTime(1970);
-                              return dateA.compareTo(dateB);
-                            });
-                          }
-                          _amountCtrl.clear();
-                          _dateCtrl.clear();
-                          _editingTransaction = null;
-                          _isEditingOpening = false;
-                        });
-                        await LocalDatabase.savePartiesToDisk();
-                      },
-                      child: Icon((_editingTransaction != null || _isEditingOpening) ? Icons.save : Icons.add, size: 20),
                     ),
                   ),
-                ),
-              ],
+                  Expanded(
+                    flex: 35,
+                    child: Text(
+                      "DATE",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 20,
+                    child: Text(
+                      "DEBIT",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 20,
+                    child: Text(
+                      "CREDIT",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(flex: 15, child: SizedBox()),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 15),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            color: isDark ? Colors.blueGrey[900] : Colors.blueGrey[200],
-            child: _isCustomMode 
-              ? Row(
-                  children: [
-                    Text(
-                      "CUSTOM RANGE : FROM ${_customFrom!.day.toString().padLeft(2, '0')}-${_customFrom!.month.toString().padLeft(2, '0')}-${_customFrom!.year} TO ${_customTo!.day.toString().padLeft(2, '0')}-${_customTo!.month.toString().padLeft(2, '0')}-${_customTo!.year}",
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () {
-                        setState(() {
-                          _isCustomMode = false;
-                          _viewMonth = DateTime.now().month;
-                          _viewYear = DateTime.now().year;
-                        });
-                      },
-                    ),
-                  ],
-                )
-              : _isAllMode
-                ? Row(
-                    children: [
-                      const Text("ALL TRANSACTIONS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 16),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () {
-                          setState(() {
-                            _isAllMode = false;
-                            _viewMonth = DateTime.now().month;
-                            _viewYear = DateTime.now().year;
-                          });
-                        },
-                      ),
-                    ],
-                  )
-                : Row(
-                  children: [
-                    Expanded(
-                      child: FittedBox(
-                        alignment: Alignment.centerLeft,
-                        fit: BoxFit.scaleDown,
-                        child: Text("CURRENT MONTH : ${_months[_viewMonth - 1]} $_viewYear", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                      ),
-                    ),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        padding: Platform.isWindows ? const EdgeInsets.symmetric(horizontal: 8) : const EdgeInsets.all(8),
-                        minimumSize: Platform.isWindows ? Size.zero : const Size(40, 40),
-                        tapTargetSize: Platform.isWindows ? MaterialTapTargetSize.shrinkWrap : MaterialTapTargetSize.padded,
-                        foregroundColor: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? Colors.grey : (isDark ? Colors.white : Colors.black),
-                      ),
-                      onPressed: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? null : () {
-                        setState(() {
-                          if (_viewMonth == 1) {
-                            _viewMonth = 12;
-                            _viewYear--;
-                          } else {
-                            _viewMonth--;
-                          }
-                        });
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.arrow_back_ios, size: 14, color: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? Colors.grey : null),
-                          if (Platform.isWindows)
-                            const Text(" PREVIOUS MONTH", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        padding: Platform.isWindows ? const EdgeInsets.symmetric(horizontal: 8) : const EdgeInsets.all(8),
-                        minimumSize: Platform.isWindows ? Size.zero : const Size(40, 40),
-                        tapTargetSize: Platform.isWindows ? MaterialTapTargetSize.shrinkWrap : MaterialTapTargetSize.padded,
-                        foregroundColor: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? Colors.grey : (isDark ? Colors.white : Colors.black),
-                      ),
-                      onPressed: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? null : () {
-                        setState(() {
-                          if (_viewMonth == 12) {
-                            _viewMonth = 1;
-                            _viewYear++;
-                          } else {
-                            _viewMonth++;
-                          }
-                        });
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (Platform.isWindows)
-                            const Text("NEXT MONTH ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                          Icon(Icons.arrow_forward_ios, size: 14, color: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? Colors.grey : null),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _isAllMode = true;
-                        });
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        minimumSize: const Size(0, 30),
-                      ),
-                      child: const Text("ALL", style: TextStyle(fontSize: 10)),
-                    ),
-                    const SizedBox(width: 4),
-                    ElevatedButton(
-                      onPressed: _showCustomRangePopup,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        minimumSize: const Size(0, 30),
-                      ),
-                      child: const Text("CUSTOM", style: TextStyle(fontSize: 10)),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 16),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () {
-                        setState(() {
-                          _viewMonth = DateTime.now().month;
-                          _viewYear = DateTime.now().year;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-          ),
-          Container(
-            color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[100],
-            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
-            child: Row(
-              children: const [
-                Expanded(flex: 10, child: Text("SR NO.", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                Expanded(flex: 35, child: Text("DATE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                Expanded(flex: 20, child: Text("DEBIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                Expanded(flex: 20, child: Text("CREDIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
-                Expanded(flex: 15, child: SizedBox()),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: displayedTransactions.length + (isBeforePartyOpening ? 0 : 1),
-              itemBuilder: (context, i) {
-                if (!isBeforePartyOpening && i == 0) {
-                  final String obDebit = (displayOpeningType == 'debit' && displayOpeningVal > 0) ? displayOpeningVal.toStringAsFixed(2) : '';
-                  final String obCredit = (displayOpeningType == 'credit' && displayOpeningVal > 0) ? displayOpeningVal.toStringAsFixed(2) : '';
+            Expanded(
+              child: ListView.builder(
+                itemCount:
+                    displayedTransactions.length +
+                    (isBeforePartyOpening ? 0 : 1),
+                itemBuilder: (context, i) {
+                  if (!isBeforePartyOpening && i == 0) {
+                    final String obDebit =
+                        (displayOpeningType == 'debit' && displayOpeningVal > 0)
+                        ? displayOpeningVal.toStringAsFixed(2)
+                        : '';
+                    final String obCredit =
+                        (displayOpeningType == 'credit' &&
+                            displayOpeningVal > 0)
+                        ? displayOpeningVal.toStringAsFixed(2)
+                        : '';
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(
+                            top: 8.0,
+                            left: 8.0,
+                            right: 8.0,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 85,
+                                child: isOriginalOpening
+                                    ? GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _isEditingOpening = true;
+                                            _editingTransaction = null;
+                                            _dateCtrl.text = displayOpeningDate;
+                                            _amountCtrl.text =
+                                                displayOpeningVal > 0
+                                                ? displayOpeningVal
+                                                      .toStringAsFixed(2)
+                                                : '';
+                                            _isDebit =
+                                                displayOpeningType == 'debit';
+                                          });
+                                        },
+                                        child: Container(
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: isDark
+                                                ? Colors.blueGrey[800]
+                                                : Colors.blueGrey[50],
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              const Expanded(
+                                                flex: 10,
+                                                child: Padding(
+                                                  padding: EdgeInsets.symmetric(
+                                                    horizontal: 4.0,
+                                                  ),
+                                                  child: FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    alignment:
+                                                        Alignment.centerLeft,
+                                                    child: Text(
+                                                      "OPENING",
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                flex: 35,
+                                                child: Text(
+                                                  displayOpeningDate,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                              Expanded(
+                                                flex: 20,
+                                                child: Text(
+                                                  obDebit,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.green,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                              Expanded(
+                                                flex: 20,
+                                                child: Text(
+                                                  obCredit,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.red,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        height: 36,
+                                        alignment: Alignment.center,
+                                        child: Row(
+                                          children: [
+                                            const Expanded(
+                                              flex: 10,
+                                              child: Padding(
+                                                padding: EdgeInsets.symmetric(
+                                                  horizontal: 4.0,
+                                                ),
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  alignment:
+                                                      Alignment.centerLeft,
+                                                  child: Text(
+                                                    "OPENING",
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 35,
+                                              child: Text(
+                                                displayOpeningDate,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 20,
+                                              child: Text(
+                                                obDebit,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.green,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 20,
+                                              child: Text(
+                                                obCredit,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.red,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                              ),
+                              const Expanded(flex: 15, child: SizedBox()),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: isDark
+                              ? Colors.blueGrey[700]
+                              : Colors.blueGrey.shade200,
+                        ),
+                      ],
+                    );
+                  }
+
+                  final t =
+                      displayedTransactions[isBeforePartyOpening ? i : i - 1];
+                  final date = t['date'] ?? '';
+                  final debitVal = t['debit'] ?? 0.0;
+                  final creditVal = t['credit'] ?? 0.0;
+
+                  final debitStr = debitVal > 0
+                      ? debitVal.toStringAsFixed(2)
+                      : '';
+                  final creditStr = creditVal > 0
+                      ? creditVal.toStringAsFixed(2)
+                      : '';
+
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
+                        padding: const EdgeInsets.only(
+                          top: 8.0,
+                          left: 8.0,
+                          right: 8.0,
+                        ),
                         child: Row(
                           children: [
-                        Expanded(
-                          flex: 85,
-                          child: isOriginalOpening ? GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isEditingOpening = true;
-                                _editingTransaction = null;
-                                _dateCtrl.text = displayOpeningDate;
-                                _amountCtrl.text = displayOpeningVal > 0 ? displayOpeningVal.toStringAsFixed(2) : '';
-                                _isDebit = displayOpeningType == 'debit';
-                              });
-                            },
-                            child: Container(
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                                borderRadius: BorderRadius.circular(16),
+                            Expanded(
+                              flex: 85,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _editingTransaction = t;
+                                    _isEditingOpening = false;
+                                    _dateCtrl.text = date;
+                                    _amountCtrl.text =
+                                        (debitVal > 0 ? debitVal : creditVal)
+                                            .toStringAsFixed(2);
+                                    _isDebit = debitVal > 0;
+                                  });
+                                },
+                                child: Container(
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.blueGrey[800]
+                                        : Colors.blueGrey[50],
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 10,
+                                        child: Text(
+                                          "  $i",
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 35,
+                                        child: Text(
+                                          date,
+                                          style: const TextStyle(fontSize: 12),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 20,
+                                        child: Text(
+                                          debitStr,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.green,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 20,
+                                        child: Text(
+                                          creditStr,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  const Expanded(flex: 10, child: Padding(padding: EdgeInsets.symmetric(horizontal: 4.0), child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text("OPENING", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold))))),
-                                  Expanded(flex: 35, child: Text(displayOpeningDate, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
-                                  Expanded(flex: 20, child: Text(obDebit, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                                  Expanded(flex: 20, child: Text(obCredit, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                                ],
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 15,
+                              child: SizedBox(
+                                height: 36,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    padding: EdgeInsets.zero,
+                                    backgroundColor: (_editingTransaction == t)
+                                        ? Colors.grey.withOpacity(0.5)
+                                        : (isDark
+                                              ? Colors.red[900]!.withOpacity(
+                                                  0.4,
+                                                )
+                                              : Colors.red[100]),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  onPressed: (_editingTransaction == t)
+                                      ? null
+                                      : () => _showDeleteTransactionDialog(
+                                          party,
+                                          t,
+                                        ),
+                                  child: Icon(
+                                    Icons.delete,
+                                    color: (_editingTransaction == t)
+                                        ? Colors.grey
+                                        : Colors.red,
+                                  ),
+                                ),
                               ),
                             ),
-                          ) : Container(
-                            height: 36,
-                            alignment: Alignment.center,
-                            child: Row(
-                              children: [
-                                const Expanded(flex: 10, child: Padding(padding: EdgeInsets.symmetric(horizontal: 4.0), child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text("OPENING", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold))))),
-                                Expanded(flex: 35, child: Text(displayOpeningDate, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
-                                Expanded(flex: 20, child: Text(obDebit, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                                Expanded(flex: 20, child: Text(obCredit, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const Expanded(flex: 15, child: SizedBox()),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Divider(height: 1, thickness: 1, color: isDark ? Colors.blueGrey[700] : Colors.blueGrey.shade200),
-                ],
-              );
-                }
-
-                final t = displayedTransactions[isBeforePartyOpening ? i : i - 1];
-                final date = t['date'] ?? '';
-                final debitVal = t['debit'] ?? 0.0;
-                final creditVal = t['credit'] ?? 0.0;
-                
-                final debitStr = debitVal > 0 ? debitVal.toStringAsFixed(2) : '';
-                final creditStr = creditVal > 0 ? creditVal.toStringAsFixed(2) : '';
-
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
-                      child: Row(
-                        children: [
-                      Expanded(
-                        flex: 85,
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _editingTransaction = t;
-                              _isEditingOpening = false;
-                              _dateCtrl.text = date;
-                              _amountCtrl.text = (debitVal > 0 ? debitVal : creditVal).toStringAsFixed(2);
-                              _isDebit = debitVal > 0;
-                            });
-                          },
-                          child: Container(
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(flex: 10, child: Text("  $i", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                                Expanded(flex: 35, child: Text(date, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
-                                Expanded(flex: 20, child: Text(debitStr, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                                Expanded(flex: 20, child: Text(creditStr, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                              ],
-                            ),
-                          ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 15,
-                        child: SizedBox(
-                          height: 36,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              backgroundColor: (_editingTransaction == t)
-                                  ? Colors.grey.withOpacity(0.5)
-                                  : (isDark ? Colors.red[900]!.withOpacity(0.4) : Colors.red[100]),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            onPressed: (_editingTransaction == t) ? null : () => _showDeleteTransactionDialog(party, t),
-                            child: Icon(Icons.delete, color: (_editingTransaction == t) ? Colors.grey : Colors.red),
-                          ),
-                        ),
+                      const SizedBox(height: 8),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: isDark
+                            ? Colors.blueGrey[700]
+                            : Colors.blueGrey.shade200,
                       ),
                     ],
+                  );
+                },
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                vertical: 12.0,
+                horizontal: 8.0,
+              ),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(
+                    color: isDark
+                        ? Colors.blueGrey[700]!
+                        : Colors.blueGrey.shade300,
+                    width: 2,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Divider(height: 1, thickness: 1, color: isDark ? Colors.blueGrey[700] : Colors.blueGrey.shade200),
-              ],
-            );
-              },
+                color: isDark ? Colors.blueGrey[800] : Colors.grey[200],
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    flex: 45,
+                    child: Text(
+                      "TOTAL",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 20,
+                    child: Text(
+                      totalDebit.toStringAsFixed(2),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 20,
+                    child: Text(
+                      totalCredit.toStringAsFixed(2),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const Expanded(flex: 15, child: SizedBox()),
+                ],
+              ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade300, width: 2)),
-              color: isDark ? Colors.blueGrey[800] : Colors.grey[200],
+            Container(
+              padding: const EdgeInsets.symmetric(
+                vertical: 12.0,
+                horizontal: 8.0,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.blueGrey[900] : Colors.grey[300],
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    flex: 45,
+                    child: Text(
+                      "GRAND TOTAL",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 40,
+                    child: Text(
+                      grandTotal.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontSize: 20,
+                        color: grandTotalColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 15,
+                    child: SizedBox(
+                      height: 32,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: isDark
+                              ? Colors.red[900]
+                              : Colors.red,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: () => _generateLedgerPDF(
+                          party: party,
+                          displayedTransactions: displayedTransactions,
+                          isOriginalOpening: isOriginalOpening,
+                          displayOpeningVal: displayOpeningVal,
+                          displayOpeningType: displayOpeningType,
+                          displayOpeningDate: displayOpeningDate,
+                          isBeforePartyOpening: isBeforePartyOpening,
+                          totalDebit: totalDebit,
+                          totalCredit: totalCredit,
+                          grandTotal: grandTotal,
+                          isDebitBigger: isDebitBigger,
+                        ),
+                        child: const Text(
+                          "PDF",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                const Expanded(
-                  flex: 45,
-                  child: Text("TOTAL", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                ),
-                Expanded(
-                  flex: 20,
-                  child: Text(totalDebit.toStringAsFixed(2), style: const TextStyle(fontSize: 14, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                ),
-                Expanded(
-                  flex: 20,
-                  child: Text(totalCredit.toStringAsFixed(2), style: const TextStyle(fontSize: 14, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                ),
-                const Expanded(flex: 15, child: SizedBox()),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
-            decoration: BoxDecoration(
-              color: isDark ? Colors.blueGrey[900] : Colors.grey[300],
-            ),
-            child: Row(
-              children: [
-                const Expanded(
-                  flex: 45,
-                  child: Text("GRAND TOTAL", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                ),
-                Expanded(
-                  flex: 40,
-                  child: Text(grandTotal.toStringAsFixed(2), style: TextStyle(fontSize: 20, color: grandTotalColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-                ),
-                const Expanded(flex: 15, child: SizedBox()),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
