@@ -5432,6 +5432,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   bool _isCustomMode = false;
   DateTime? _customFrom;
   DateTime? _customTo;
+  bool _isAllMode = false;
 
   static const _months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
@@ -5511,8 +5512,10 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
             }
 
             return Dialog(
-              child: Padding(
-                padding: const EdgeInsets.all(15.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+                child: Padding(
+                  padding: const EdgeInsets.all(15.0),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -5561,7 +5564,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                   ],
                 ),
               ),
-            );
+            ),
+          );
           },
         );
       },
@@ -5595,14 +5599,18 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     final String ot = party['opening_type'] ?? 'debit';
     
     bool isBeforePartyOpening = false;
-    if (!_isCustomMode) {
+    if (_isAllMode) {
+      isBeforePartyOpening = false;
+    } else if (!_isCustomMode) {
       isBeforePartyOpening = _viewYear < partyOpenDate.year || (_viewYear == partyOpenDate.year && _viewMonth < partyOpenDate.month);
     } else {
       isBeforePartyOpening = _customTo != null && _customTo!.isBefore(partyOpenDate);
     }
     
     bool isOriginalOpening = false;
-    if (!_isCustomMode) {
+    if (_isAllMode) {
+      isOriginalOpening = true;
+    } else if (!_isCustomMode) {
       isOriginalOpening = _viewMonth == partyOpenDate.month && _viewYear == partyOpenDate.year;
     } else {
       isOriginalOpening = _customFrom != null && !_customFrom!.isAfter(partyOpenDate);
@@ -5619,7 +5627,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       DateTime? d = _parseDate(t['date'] ?? '');
       if (d == null) continue;
 
-      if (_isCustomMode) {
+      if (_isAllMode) {
+        displayedTransactions.add(t);
+      } else if (_isCustomMode) {
         if (d.isBefore(_customFrom!)) {
           runningTotalDebit += (t['debit'] ?? 0.0);
           runningTotalCredit += (t['credit'] ?? 0.0);
@@ -5814,14 +5824,41 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     ),
                   ],
                 )
-              : Row(
+              : _isAllMode
+                ? Row(
+                    children: [
+                      const Text("ALL TRANSACTIONS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          setState(() {
+                            _isAllMode = false;
+                            _viewMonth = DateTime.now().month;
+                            _viewYear = DateTime.now().year;
+                          });
+                        },
+                      ),
+                    ],
+                  )
+                : Row(
                   children: [
-                    Text("CURRENT MONTH : ${_months[_viewMonth - 1]} $_viewYear", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                    const Spacer(),
-                    IconButton(
-                      icon: Icon(Icons.arrow_back_ios, size: 14, color: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? Colors.grey : null),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                    Expanded(
+                      child: FittedBox(
+                        alignment: Alignment.centerLeft,
+                        fit: BoxFit.scaleDown,
+                        child: Text("CURRENT MONTH : ${_months[_viewMonth - 1]} $_viewYear", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                      ),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: Platform.isWindows ? const EdgeInsets.symmetric(horizontal: 8) : const EdgeInsets.all(8),
+                        minimumSize: Platform.isWindows ? Size.zero : const Size(40, 40),
+                        tapTargetSize: Platform.isWindows ? MaterialTapTargetSize.shrinkWrap : MaterialTapTargetSize.padded,
+                        foregroundColor: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? Colors.grey : (isDark ? Colors.white : Colors.black),
+                      ),
                       onPressed: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? null : () {
                         setState(() {
                           if (_viewMonth == 1) {
@@ -5832,12 +5869,23 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                           }
                         });
                       },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_back_ios, size: 14, color: (_viewYear == partyOpenDate.year && _viewMonth == partyOpenDate.month) ? Colors.grey : null),
+                          if (Platform.isWindows)
+                            const Text(" PREVIOUS MONTH", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 5),
-                    IconButton(
-                      icon: Icon(Icons.arrow_forward_ios, size: 14, color: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? Colors.grey : null),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                    const SizedBox(width: 2),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        padding: Platform.isWindows ? const EdgeInsets.symmetric(horizontal: 8) : const EdgeInsets.all(8),
+                        minimumSize: Platform.isWindows ? Size.zero : const Size(40, 40),
+                        tapTargetSize: Platform.isWindows ? MaterialTapTargetSize.shrinkWrap : MaterialTapTargetSize.padded,
+                        foregroundColor: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? Colors.grey : (isDark ? Colors.white : Colors.black),
+                      ),
                       onPressed: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? null : () {
                         setState(() {
                           if (_viewMonth == 12) {
@@ -5848,17 +5896,38 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                           }
                         });
                       },
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (Platform.isWindows)
+                            const Text("NEXT MONTH ", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                          Icon(Icons.arrow_forward_ios, size: 14, color: (_viewYear == DateTime.now().year && _viewMonth == DateTime.now().month) ? Colors.grey : null),
+                        ],
+                      ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 4),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _isAllMode = true;
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: const Size(0, 30),
+                      ),
+                      child: const Text("ALL", style: TextStyle(fontSize: 10)),
+                    ),
+                    const SizedBox(width: 4),
                     ElevatedButton(
                       onPressed: _showCustomRangePopup,
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                         minimumSize: const Size(0, 30),
                       ),
                       child: const Text("CUSTOM", style: TextStyle(fontSize: 10)),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.close, size: 16),
                       padding: EdgeInsets.zero,
