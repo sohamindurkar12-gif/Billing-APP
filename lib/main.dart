@@ -5434,6 +5434,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   DateTime? _customTo;
   bool _isAllMode = false;
 
+  Map<String, dynamic>? _editingTransaction;
+  bool _isEditingOpening = false;
+
   static const _months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
   Widget _buildToggleBtn(String label, bool isSelected) {
@@ -5488,6 +5491,106 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     } catch (e) {
       return null;
     }
+  }
+
+  Future<bool> _showUnsavedWarning() async {
+    bool? result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+            child: Padding(
+              padding: const EdgeInsets.all(15.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 40),
+                  const SizedBox(height: 10),
+                  const Text("UNSAVED CHANGES", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+                  const SizedBox(height: 15),
+                  const Text("You have unsaved changes. Are you sure you want to close without saving?", textAlign: TextAlign.center),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text("CANCEL", style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text("DISCARD", style: TextStyle(color: Colors.white)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    return result ?? false;
+  }
+
+  void _showDeleteTransactionDialog(Map<String, dynamic> party, Map<String, dynamic> transactionToRemove) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: Platform.isWindows ? 400 : double.infinity),
+            child: Padding(
+              padding: const EdgeInsets.all(15.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 40),
+                  const SizedBox(height: 10),
+                  const Text("WARNING", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+                  const SizedBox(height: 15),
+                  const Text("Are you sure you want to delete this transaction?", textAlign: TextAlign.center),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () async {
+                            setState(() {
+                              List tList = party['transactions'];
+                              tList.remove(transactionToRemove);
+                            });
+                            await LocalDatabase.savePartiesToDisk();
+                            Navigator.pop(context);
+                          },
+                          child: const Text("YES, DELETE", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("CANCEL", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showCustomRangePopup() {
@@ -5695,14 +5798,58 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.blueGrey[800],
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
+    bool isFormChanged = false;
+    double currentAmt = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
+    String currentDate = _dateCtrl.text.trim();
+
+    if (_isEditingOpening) {
+      double origAmt = double.tryParse(party['opening_balance']?.toString() ?? "0.0") ?? 0.0;
+      String origDate = party['opening_date'] ?? '';
+      bool origIsDebit = (party['opening_type'] ?? 'credit') == 'debit';
+      if (currentAmt != origAmt || currentDate != origDate || _isDebit != origIsDebit) {
+        isFormChanged = true;
+      }
+    } else if (_editingTransaction != null) {
+      double origDebit = double.tryParse(_editingTransaction!['debit']?.toString() ?? "0.0") ?? 0.0;
+      double origCredit = double.tryParse(_editingTransaction!['credit']?.toString() ?? "0.0") ?? 0.0;
+      String origDate = _editingTransaction!['date'] ?? '';
+      bool origIsDebit = origDebit > 0;
+      double origAmt = origDebit > 0 ? origDebit : origCredit;
+      if (currentAmt != origAmt || currentDate != origDate || _isDebit != origIsDebit) {
+        isFormChanged = true;
+      }
+    } else {
+      if (_amountCtrl.text.trim().isNotEmpty || _dateCtrl.text.trim().isNotEmpty) {
+        isFormChanged = true;
+      }
+    }
+
+    bool canSave = isValidAdd && isFormChanged;
+
+    return WillPopScope(
+      onWillPop: () async {
+        if (canSave) {
+          return await _showUnsavedWarning();
+        }
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.blueGrey[800],
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: () async {
+              if (canSave) {
+                bool discard = await _showUnsavedWarning();
+                if (discard && mounted) {
+                  Navigator.pop(context);
+                }
+              } else {
+                Navigator.pop(context);
+              }
+            },
+          ),
         title: const Text(
           "LEDGER",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -5775,23 +5922,46 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        backgroundColor: isValidAdd ? Colors.green : Colors.grey.withOpacity(0.5),
-                        foregroundColor: isValidAdd ? Colors.white : Colors.white70,
+                        backgroundColor: canSave ? Colors.green : Colors.grey.withOpacity(0.5),
+                        foregroundColor: canSave ? Colors.white : Colors.white70,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
-                      onPressed: !isValidAdd ? null : () async {
+                      onPressed: !canSave ? null : () async {
                         setState(() {
-                          transactions.add({
-                            'date': _dateCtrl.text.trim(),
-                            'debit': _isDebit ? double.tryParse(_amountCtrl.text.trim()) ?? 0.0 : 0.0,
-                            'credit': !_isDebit ? double.tryParse(_amountCtrl.text.trim()) ?? 0.0 : 0.0,
-                          });
+                          if (_isEditingOpening) {
+                            party['opening_balance'] = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
+                            party['opening_date'] = _dateCtrl.text.trim();
+                            party['opening_type'] = _isDebit ? 'debit' : 'credit';
+                          } else if (_editingTransaction != null) {
+                            _editingTransaction!['date'] = _dateCtrl.text.trim();
+                            _editingTransaction!['debit'] = _isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0;
+                            _editingTransaction!['credit'] = !_isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0;
+                            
+                            transactions.sort((a, b) {
+                              DateTime dateA = _parseDate(a['date'] ?? "") ?? DateTime(1970);
+                              DateTime dateB = _parseDate(b['date'] ?? "") ?? DateTime(1970);
+                              return dateA.compareTo(dateB);
+                            });
+                          } else {
+                            transactions.add({
+                              'date': _dateCtrl.text.trim(),
+                              'debit': _isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0,
+                              'credit': !_isDebit ? (double.tryParse(_amountCtrl.text.trim()) ?? 0.0) : 0.0,
+                            });
+                            transactions.sort((a, b) {
+                              DateTime dateA = _parseDate(a['date'] ?? "") ?? DateTime(1970);
+                              DateTime dateB = _parseDate(b['date'] ?? "") ?? DateTime(1970);
+                              return dateA.compareTo(dateB);
+                            });
+                          }
                           _amountCtrl.clear();
                           _dateCtrl.clear();
+                          _editingTransaction = null;
+                          _isEditingOpening = false;
                         });
                         await LocalDatabase.savePartiesToDisk();
                       },
-                      child: const Icon(Icons.add, size: 20),
+                      child: Icon((_editingTransaction != null || _isEditingOpening) ? Icons.save : Icons.add, size: 20),
                     ),
                   ),
                 ),
@@ -5948,9 +6118,10 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
             child: Row(
               children: const [
                 Expanded(flex: 10, child: Text("SR NO.", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                Expanded(flex: 50, child: Text("DATE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                Expanded(flex: 35, child: Text("DATE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
                 Expanded(flex: 20, child: Text("DEBIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
                 Expanded(flex: 20, child: Text("CREDIT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11), textAlign: TextAlign.center)),
+                Expanded(flex: 15, child: SizedBox()),
               ],
             ),
           ),
@@ -5961,20 +6132,61 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                 if (!isBeforePartyOpening && i == 0) {
                   final String obDebit = (displayOpeningType == 'debit' && displayOpeningVal > 0) ? displayOpeningVal.toStringAsFixed(2) : '';
                   final String obCredit = (displayOpeningType == 'credit' && displayOpeningVal > 0) ? displayOpeningVal.toStringAsFixed(2) : '';
-                  return Container(
-                    decoration: BoxDecoration(
-                      border: Border(bottom: BorderSide(color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200, width: 1)),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
-                    child: Row(
-                      children: [
-                        const Expanded(flex: 10, child: Text("OPENING", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold))),
-                        Expanded(flex: 50, child: Text(displayOpeningDate, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
-                        Expanded(flex: 20, child: Text(obDebit, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                        Expanded(flex: 20, child: Text(obCredit, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
+                        child: Row(
+                          children: [
+                        Expanded(
+                          flex: 85,
+                          child: isOriginalOpening ? GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isEditingOpening = true;
+                                _editingTransaction = null;
+                                _dateCtrl.text = displayOpeningDate;
+                                _amountCtrl.text = displayOpeningVal > 0 ? displayOpeningVal.toStringAsFixed(2) : '';
+                                _isDebit = displayOpeningType == 'debit';
+                              });
+                            },
+                            child: Container(
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Expanded(flex: 10, child: Padding(padding: EdgeInsets.symmetric(horizontal: 4.0), child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text("OPENING", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold))))),
+                                  Expanded(flex: 35, child: Text(displayOpeningDate, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
+                                  Expanded(flex: 20, child: Text(obDebit, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                                  Expanded(flex: 20, child: Text(obCredit, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                                ],
+                              ),
+                            ),
+                          ) : Container(
+                            height: 36,
+                            alignment: Alignment.center,
+                            child: Row(
+                              children: [
+                                const Expanded(flex: 10, child: Padding(padding: EdgeInsets.symmetric(horizontal: 4.0), child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Text("OPENING", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold))))),
+                                Expanded(flex: 35, child: Text(displayOpeningDate, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
+                                Expanded(flex: 20, child: Text(obDebit, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                                Expanded(flex: 20, child: Text(obCredit, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Expanded(flex: 15, child: SizedBox()),
                       ],
                     ),
-                  );
+                  ),
+                  const SizedBox(height: 8),
+                  Divider(height: 1, thickness: 1, color: isDark ? Colors.blueGrey[700] : Colors.blueGrey.shade200),
+                ],
+              );
                 }
 
                 final t = displayedTransactions[isBeforePartyOpening ? i : i - 1];
@@ -5985,20 +6197,69 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                 final debitStr = debitVal > 0 ? debitVal.toStringAsFixed(2) : '';
                 final creditStr = creditVal > 0 ? creditVal.toStringAsFixed(2) : '';
 
-                return Container(
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200, width: 1)),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
-                  child: Row(
-                    children: [
-                      Expanded(flex: 10, child: Text("$i", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-                      Expanded(flex: 50, child: Text(date, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
-                      Expanded(flex: 20, child: Text(debitStr, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
-                      Expanded(flex: 20, child: Text(creditStr, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0, left: 8.0, right: 8.0),
+                      child: Row(
+                        children: [
+                      Expanded(
+                        flex: 85,
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _editingTransaction = t;
+                              _isEditingOpening = false;
+                              _dateCtrl.text = date;
+                              _amountCtrl.text = (debitVal > 0 ? debitVal : creditVal).toStringAsFixed(2);
+                              _isDebit = debitVal > 0;
+                            });
+                          },
+                          child: Container(
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(flex: 10, child: Text("  $i", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                                Expanded(flex: 35, child: Text(date, style: const TextStyle(fontSize: 12), textAlign: TextAlign.center)),
+                                Expanded(flex: 20, child: Text(debitStr, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                                Expanded(flex: 20, child: Text(creditStr, style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 15,
+                        child: SizedBox(
+                          height: 36,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              backgroundColor: (_editingTransaction == t)
+                                  ? Colors.grey.withOpacity(0.5)
+                                  : (isDark ? Colors.red[900]!.withOpacity(0.4) : Colors.red[100]),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            onPressed: (_editingTransaction == t) ? null : () => _showDeleteTransactionDialog(party, t),
+                            child: Icon(Icons.delete, color: (_editingTransaction == t) ? Colors.grey : Colors.red),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                );
+                ),
+                const SizedBox(height: 8),
+                Divider(height: 1, thickness: 1, color: isDark ? Colors.blueGrey[700] : Colors.blueGrey.shade200),
+              ],
+            );
               },
             ),
           ),
@@ -6011,7 +6272,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
             child: Row(
               children: [
                 const Expanded(
-                  flex: 60,
+                  flex: 45,
                   child: Text("TOTAL", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                 ),
                 Expanded(
@@ -6022,6 +6283,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                   flex: 20,
                   child: Text(totalCredit.toStringAsFixed(2), style: const TextStyle(fontSize: 14, color: Colors.red, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                 ),
+                const Expanded(flex: 15, child: SizedBox()),
               ],
             ),
           ),
@@ -6033,18 +6295,20 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
             child: Row(
               children: [
                 const Expanded(
-                  flex: 60,
+                  flex: 45,
                   child: Text("GRAND TOTAL", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                 ),
                 Expanded(
                   flex: 40,
                   child: Text(grandTotal.toStringAsFixed(2), style: TextStyle(fontSize: 20, color: grandTotalColor, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                 ),
+                const Expanded(flex: 15, child: SizedBox()),
               ],
             ),
           ),
         ],
       ),
+    ),
     );
   }
 }
