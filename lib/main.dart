@@ -3270,7 +3270,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   ),
                 ] else ...[
                   const Text(
-                    "Huff , YOU ARE NOT VIP USER",
+                    "SORRY , YOU ARE NOT VIP USER",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.red,
@@ -6138,7 +6138,7 @@ class PartyLedgerScreen extends StatefulWidget {
 class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   final _amountCtrl = TextEditingController();
   final _dateCtrl = TextEditingController();
-  bool _isDebit = true; // true = DEBIT, false = CREDIT
+  String _selectedType = 'PAYMENT';
 
   int _viewMonth = DateTime.now().month;
   int _viewYear = DateTime.now().year;
@@ -6169,7 +6169,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   Widget _buildToggleBtn(String label, bool isSelected) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
-      height: 45,
+      height: 21,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           padding: EdgeInsets.zero,
@@ -6189,22 +6189,19 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
             ),
           ),
         ),
-        onPressed: () => setState(() => _isDebit = label == "DEBIT"),
+        onPressed: () => setState(() => _selectedType = label),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: label == "CREDIT" ? 8 : 9,
-              ),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 8),
             ),
             if (isSelected) ...[
               const SizedBox(width: 1),
               Icon(
                 Icons.check,
-                size: 10,
+                size: 8,
                 color: isDark ? Colors.black : Colors.white,
               ),
             ],
@@ -6936,10 +6933,13 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       if (dateRegExp.hasMatch(_dateCtrl.text.trim())) {
         DateTime? enteredDate = _parseDate(_dateCtrl.text.trim());
         DateTime? openingDate = _parseDate(party['opening_date'] ?? "");
-        if (enteredDate != null &&
-            openingDate != null &&
-            !enteredDate.isBefore(openingDate)) {
-          isValidAdd = true;
+        if (enteredDate != null) {
+          if (_isEditingOpening) {
+            isValidAdd = true;
+          } else if (openingDate == null ||
+              !enteredDate.isBefore(openingDate)) {
+            isValidAdd = true;
+          }
         }
       }
     }
@@ -6952,10 +6952,10 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
       double origAmt =
           double.tryParse(party['opening_balance']?.toString() ?? "0.0") ?? 0.0;
       String origDate = party['opening_date'] ?? '';
-      bool origIsDebit = (party['opening_type'] ?? 'credit') == 'debit';
+      String origType = party['opening_type'] ?? 'PAYMENT';
       if (currentAmt != origAmt ||
           currentDate != origDate ||
-          _isDebit != origIsDebit) {
+          _selectedType != origType) {
         isFormChanged = true;
       }
     } else if (_editingTransaction != null) {
@@ -6968,11 +6968,13 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
           ) ??
           0.0;
       String origDate = _editingTransaction!['date'] ?? '';
-      bool origIsDebit = origDebit > 0;
+      String origType =
+          _editingTransaction!['type'] ??
+          (origDebit > 0 ? 'PAYMENT' : 'RECEIPT');
       double origAmt = origDebit > 0 ? origDebit : origCredit;
       if (currentAmt != origAmt ||
           currentDate != origDate ||
-          _isDebit != origIsDebit) {
+          _selectedType != origType) {
         isFormChanged = true;
       }
     } else {
@@ -7031,6 +7033,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       height: 45,
                       child: TextField(
                         controller: _amountCtrl,
+                        onChanged: (_) => setState(() {}),
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
@@ -7073,11 +7076,47 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Expanded(flex: 15, child: _buildToggleBtn("DEBIT", _isDebit)),
-                  const SizedBox(width: 4),
                   Expanded(
-                    flex: 15,
-                    child: _buildToggleBtn("CREDIT", !_isDebit),
+                    flex: 30,
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildToggleBtn(
+                                "PAYMENT",
+                                _selectedType == 'PAYMENT',
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: _buildToggleBtn(
+                                "RECEIPT",
+                                _selectedType == 'RECEIPT',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildToggleBtn(
+                                "PURCHASE",
+                                _selectedType == 'PURCHASE',
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: _buildToggleBtn(
+                                "SALES",
+                                _selectedType == 'SALES',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 4),
                   Expanded(
@@ -7109,25 +7148,28 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                         0.0;
                                     party['opening_date'] = _dateCtrl.text
                                         .trim();
-                                    party['opening_type'] = _isDebit
-                                        ? 'debit'
-                                        : 'credit';
+                                    party['opening_type'] = _selectedType;
                                   } else if (_editingTransaction != null) {
+                                    bool toDebit =
+                                        _selectedType == 'PAYMENT' ||
+                                        _selectedType == 'SALES';
                                     _editingTransaction!['date'] = _dateCtrl
                                         .text
                                         .trim();
-                                    _editingTransaction!['debit'] = _isDebit
+                                    _editingTransaction!['debit'] = toDebit
                                         ? (double.tryParse(
                                                 _amountCtrl.text.trim(),
                                               ) ??
                                               0.0)
                                         : 0.0;
-                                    _editingTransaction!['credit'] = !_isDebit
+                                    _editingTransaction!['credit'] = !toDebit
                                         ? (double.tryParse(
                                                 _amountCtrl.text.trim(),
                                               ) ??
                                               0.0)
                                         : 0.0;
+                                    _editingTransaction!['type'] =
+                                        _selectedType;
 
                                     transactions.sort((a, b) {
                                       DateTime dateA =
@@ -7139,20 +7181,24 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                       return dateA.compareTo(dateB);
                                     });
                                   } else {
+                                    bool toDebit =
+                                        _selectedType == 'PAYMENT' ||
+                                        _selectedType == 'SALES';
                                     transactions.add({
                                       'date': _dateCtrl.text.trim(),
-                                      'debit': _isDebit
+                                      'debit': toDebit
                                           ? (double.tryParse(
                                                   _amountCtrl.text.trim(),
                                                 ) ??
                                                 0.0)
                                           : 0.0,
-                                      'credit': !_isDebit
+                                      'credit': !toDebit
                                           ? (double.tryParse(
                                                   _amountCtrl.text.trim(),
                                                 ) ??
                                                 0.0)
                                           : 0.0,
+                                      'type': _selectedType,
                                     });
                                     transactions.sort((a, b) {
                                       DateTime dateA =
@@ -7426,7 +7472,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     ),
                   ),
                   Expanded(
-                    flex: 35,
+                    flex: 25,
                     child: Text(
                       "DATE",
                       style: TextStyle(
@@ -7437,7 +7483,18 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     ),
                   ),
                   Expanded(
-                    flex: 20,
+                    flex: 25,
+                    child: Text(
+                      "TYPE",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 15,
                     child: Text(
                       "DEBIT",
                       style: TextStyle(
@@ -7448,7 +7505,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     ),
                   ),
                   Expanded(
-                    flex: 20,
+                    flex: 15,
                     child: Text(
                       "CREDIT",
                       style: TextStyle(
@@ -7458,7 +7515,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  Expanded(flex: 15, child: SizedBox()),
+                  Expanded(flex: 10, child: SizedBox()),
                 ],
               ),
             ),
@@ -7503,8 +7560,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                                 ? displayOpeningVal
                                                       .toStringAsFixed(2)
                                                 : '';
-                                            _isDebit =
-                                                displayOpeningType == 'debit';
+                                            _selectedType =
+                                                party['opening_type'] ??
+                                                'PAYMENT';
                                           });
                                         },
                                         child: Container(
@@ -7541,7 +7599,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                                 ),
                                               ),
                                               Expanded(
-                                                flex: 35,
+                                                flex: 25,
                                                 child: Text(
                                                   displayOpeningDate,
                                                   style: const TextStyle(
@@ -7550,28 +7608,41 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                                   textAlign: TextAlign.center,
                                                 ),
                                               ),
-                                              Expanded(
-                                                flex: 20,
+                                              const Expanded(
+                                                flex: 25,
                                                 child: Text(
-                                                  obDebit,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.green,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
+                                                  "",
                                                   textAlign: TextAlign.center,
                                                 ),
                                               ),
                                               Expanded(
-                                                flex: 20,
-                                                child: Text(
-                                                  obCredit,
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.red,
-                                                    fontWeight: FontWeight.bold,
+                                                flex: 15,
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  child: Text(
+                                                    obDebit,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                    textAlign: TextAlign.center,
                                                   ),
-                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                              Expanded(
+                                                flex: 15,
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  child: Text(
+                                                    obCredit,
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                    textAlign: TextAlign.center,
+                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -7605,7 +7676,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                               ),
                                             ),
                                             Expanded(
-                                              flex: 35,
+                                              flex: 25,
                                               child: Text(
                                                 displayOpeningDate,
                                                 style: const TextStyle(
@@ -7614,35 +7685,46 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                                 textAlign: TextAlign.center,
                                               ),
                                             ),
-                                            Expanded(
-                                              flex: 20,
+                                            const Expanded(
+                                              flex: 25,
                                               child: Text(
-                                                obDebit,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.green,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
+                                                "",
                                                 textAlign: TextAlign.center,
                                               ),
                                             ),
                                             Expanded(
-                                              flex: 20,
-                                              child: Text(
-                                                obCredit,
-                                                style: const TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.red,
-                                                  fontWeight: FontWeight.bold,
+                                              flex: 15,
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  obDebit,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  textAlign: TextAlign.center,
                                                 ),
-                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 15,
+                                              child: FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  obCredit,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
                                               ),
                                             ),
                                           ],
                                         ),
                                       ),
                               ),
-                              const Expanded(flex: 15, child: SizedBox()),
+                              const Expanded(flex: 10, child: SizedBox()),
                             ],
                           ),
                         ),
@@ -7671,6 +7753,14 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       ? creditVal.toStringAsFixed(2)
                       : '';
 
+                  final tType = t['type'] ?? '';
+                  Color typeColor = isDark ? Colors.white : Colors.black;
+                  if (tType == 'PAYMENT' || tType == 'PURCHASE') {
+                    typeColor = Colors.red;
+                  } else if (tType == 'RECEIPT' || tType == 'SALES') {
+                    typeColor = Colors.green;
+                  }
+
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -7693,7 +7783,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                     _amountCtrl.text =
                                         (debitVal > 0 ? debitVal : creditVal)
                                             .toStringAsFixed(2);
-                                    _isDebit = debitVal > 0;
+                                    _selectedType =
+                                        t['type'] ??
+                                        (debitVal > 0 ? 'PAYMENT' : 'RECEIPT');
                                   });
                                 },
                                 child: Container(
@@ -7717,7 +7809,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                         ),
                                       ),
                                       Expanded(
-                                        flex: 35,
+                                        flex: 25,
                                         child: Text(
                                           date,
                                           style: const TextStyle(fontSize: 12),
@@ -7725,27 +7817,43 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                         ),
                                       ),
                                       Expanded(
-                                        flex: 20,
+                                        flex: 25,
                                         child: Text(
-                                          debitStr,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.green,
+                                          tType,
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: typeColor,
                                             fontWeight: FontWeight.bold,
                                           ),
                                           textAlign: TextAlign.center,
                                         ),
                                       ),
                                       Expanded(
-                                        flex: 20,
-                                        child: Text(
-                                          creditStr,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.red,
-                                            fontWeight: FontWeight.bold,
+                                        flex: 15,
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            debitStr,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
                                           ),
-                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 15,
+                                        child: FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            creditStr,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -7755,7 +7863,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              flex: 15,
+                              flex: 10,
                               child: SizedBox(
                                 height: 36,
                                 child: ElevatedButton(
@@ -7822,7 +7930,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
               child: Row(
                 children: [
                   const Expanded(
-                    flex: 45,
+                    flex: 60,
                     child: Text(
                       "TOTAL",
                       style: TextStyle(
@@ -7833,30 +7941,36 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     ),
                   ),
                   Expanded(
-                    flex: 20,
-                    child: Text(
-                      totalDebit.toStringAsFixed(2),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
+                    flex: 15,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        totalDebit.toStringAsFixed(2),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
                   Expanded(
-                    flex: 20,
-                    child: Text(
-                      totalCredit.toStringAsFixed(2),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.red,
-                        fontWeight: FontWeight.bold,
+                    flex: 15,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        totalCredit.toStringAsFixed(2),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
-                  const Expanded(flex: 15, child: SizedBox()),
+                  const Expanded(flex: 10, child: SizedBox()),
                 ],
               ),
             ),
@@ -7870,33 +7984,10 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
               ),
               child: Row(
                 children: [
-                  const Expanded(
-                    flex: 45,
-                    child: Text(
-                      "GRAND TOTAL",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
                   Expanded(
-                    flex: 40,
-                    child: Text(
-                      grandTotal.toStringAsFixed(2),
-                      style: TextStyle(
-                        fontSize: 20,
-                        color: grandTotalColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  Expanded(
-                    flex: 15,
+                    flex: 10,
                     child: SizedBox(
-                      height: 32,
+                      height: 30,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           padding: EdgeInsets.zero,
@@ -7931,6 +8022,33 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       ),
                     ),
                   ),
+                  const Expanded(
+                    flex: 50,
+                    child: Text(
+                      "GRAND TOTAL",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 30,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        grandTotal.toStringAsFixed(2),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: grandTotalColor,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                  const Expanded(flex: 10, child: SizedBox()),
                 ],
               ),
             ),
