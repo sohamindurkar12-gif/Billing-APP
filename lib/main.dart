@@ -811,6 +811,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoadingDb = true;
   String? _selectedCategoryForGrid;
 
+  bool _isPartySelected = false;
+  Map<String, dynamic>? _selectedParty;
+  final TextEditingController _partySearchController = TextEditingController();
+
   // Keyboard shortcut state (Windows only)
   String _keyBuffer = "";
   bool _isEditComboMode = false;
@@ -985,13 +989,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
         false;
   }
 
-  Future<void> _generatePDF(String customerName, bool showRateColumn) async {
+  Future<void> _generatePDF(
+    String customerName,
+    bool showRateColumn,
+    String dateString,
+    String timeString,
+  ) async {
     if (_cart.isEmpty) return;
     final pdf = pw.Document();
-    final now = DateTime.now();
 
-    final displayDate = DateFormat('dd-MM-yyyy hh:mm a').format(now);
-    final timeStampFormat = DateFormat('yyyyMMdd_HHmmss').format(now);
+    // Convert to Date object to format filename safely, and fallback to now if parsing fails
+    DateTime parsedDate;
+    try {
+      parsedDate = DateFormat(
+        "dd-MM-yyyy HH:mm:ss",
+      ).parse("$dateString $timeString");
+    } catch (e) {
+      parsedDate = DateTime.now();
+    }
+
+    final displayDate = DateFormat('dd-MM-yyyy hh:mm a').format(parsedDate);
+    final timeStampFormat = DateFormat('yyyyMMdd_HHmmss').format(parsedDate);
 
     final cleanCustomerName = customerName
         .replaceAll(RegExp(r'[^\w\s\-]'), '')
@@ -1144,7 +1162,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
-        setState(() => _cart = []);
+        setState(() {
+          _cart = [];
+          _isPartySelected = false;
+        });
       }
       return;
     }
@@ -1161,15 +1182,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
-        setState(() => _cart = []);
+        setState(() {
+          _cart = [];
+          _isPartySelected = false;
+        });
       }
     }
   }
 
   void _showCustomerNamePopup() {
     final TextEditingController nameController = TextEditingController();
+    final TextEditingController dateController = TextEditingController(
+      text: DateFormat('dd-MM-yyyy').format(DateTime.now()),
+    );
+    final TextEditingController timeController = TextEditingController(
+      text: DateFormat('HH:mm:ss').format(DateTime.now()),
+    );
+
     bool isNameTyped = false;
+
+    if (_isPartySelected && _selectedParty != null) {
+      nameController.text = _selectedParty!['name'] ?? "";
+      isNameTyped = true;
+    }
+    bool isDateValid = true;
+    bool isTimeValid = true;
     bool globalShowRateSetting = true;
+
+    final dateRegex = RegExp(r'^(0[1-9]|[12]\d|3[01])-(0[1-9]|1[0-2])-\d{4}$');
+    final timeRegex = RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$');
+
+    void validateDateTime(Function setPopupState) {
+      setPopupState(() {
+        isDateValid = dateRegex.hasMatch(dateController.text.trim());
+        isTimeValid = timeRegex.hasMatch(timeController.text.trim());
+      });
+    }
 
     showDialog(
       context: context,
@@ -1196,6 +1244,88 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 6,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  "ENTER DATE OF BILL",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.blueGrey[100]
+                                        : Colors.blueGrey,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                TextField(
+                                  controller: dateController,
+                                  textAlign: TextAlign.center,
+                                  decoration: InputDecoration(
+                                    hintText: "DD-MM-YYYY",
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  onChanged: (val) =>
+                                      validateDateTime(setPopupState),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 4,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Text(
+                                  "TIME OF BILL",
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.blueGrey[100]
+                                        : Colors.blueGrey,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                TextField(
+                                  controller: timeController,
+                                  textAlign: TextAlign.center,
+                                  decoration: InputDecoration(
+                                    hintText: "HH:MM:SS",
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  onChanged: (val) =>
+                                      validateDateTime(setPopupState),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
                       Text(
                         "PLS ENTER THE NAME OF CUSTOMER",
                         textAlign: TextAlign.center,
@@ -1207,16 +1337,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               : Colors.blueGrey,
                         ),
                       ),
-                      const SizedBox(height: 15),
+                      const SizedBox(height: 10),
                       TextField(
-                        autofocus: true,
+                        enabled: !(_isPartySelected && _selectedParty != null),
+                        autofocus:
+                            !(_isPartySelected && _selectedParty != null),
                         controller: nameController,
                         textCapitalization: TextCapitalization.words,
                         onSubmitted: (val) {
+                          if (!isDateValid || !isTimeValid) return;
                           Navigator.pop(context);
                           _generatePDF(
                             val.trim().isEmpty ? "CASH" : val.trim(),
                             globalShowRateSetting,
+                            dateController.text.trim(),
+                            timeController.text.trim(),
                           );
                         },
                         inputFormatters: [
@@ -1290,18 +1425,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: isNameTyped
+                                  backgroundColor:
+                                      (isNameTyped &&
+                                          isDateValid &&
+                                          isTimeValid)
                                       ? Colors.green
                                       : Colors.grey[300],
                                   foregroundColor: Colors.black,
                                 ),
-                                onPressed: !isNameTyped
+                                onPressed:
+                                    !(isNameTyped && isDateValid && isTimeValid)
                                     ? null
                                     : () {
                                         Navigator.pop(context);
                                         _generatePDF(
                                           nameController.text.trim(),
                                           globalShowRateSetting,
+                                          dateController.text.trim(),
+                                          timeController.text.trim(),
                                         );
                                       },
                                 child: const Text(
@@ -1342,13 +1483,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
+                                  backgroundColor:
+                                      (isDateValid &&
+                                          isTimeValid &&
+                                          !(_isPartySelected &&
+                                              _selectedParty != null))
+                                      ? Colors.blue
+                                      : Colors.grey[300],
                                   foregroundColor: Colors.black,
                                 ),
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                  _generatePDF("CASH", globalShowRateSetting);
-                                },
+                                onPressed:
+                                    !(isDateValid && isTimeValid) ||
+                                        (_isPartySelected &&
+                                            _selectedParty != null)
+                                    ? null
+                                    : () {
+                                        Navigator.pop(context);
+                                        _generatePDF(
+                                          "CASH",
+                                          globalShowRateSetting,
+                                          dateController.text.trim(),
+                                          timeController.text.trim(),
+                                        );
+                                      },
                                 child: const Text(
                                   "SKIP",
                                   style: TextStyle(
@@ -2377,7 +2534,155 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Widget _buildPartySelectionView() {
+    String query = _partySearchController.text.trim().toLowerCase();
+    List<Map<String, dynamic>> filteredParties = globalParties
+        .asMap()
+        .entries
+        .map((e) {
+          return {...e.value, 'originalIndex': e.key};
+        })
+        .where((p) {
+          final name = (p['name'] ?? "").toString().toLowerCase();
+          return name.contains(query);
+        })
+        .toList();
+
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            controller: _partySearchController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: "SEARCH PARTY...",
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
+          ),
+        ),
+        const Divider(height: 1, thickness: 1),
+        Expanded(
+          child: ListView.builder(
+            itemCount:
+                filteredParties.length + ("no party".contains(query) ? 1 : 0),
+            itemBuilder: (context, index) {
+              bool showNoParty = "no party".contains(query);
+              bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+              if (index == 0 && showNoParty) {
+                return Column(
+                  children: [
+                    ListTile(
+                      leading: const CircleAvatar(
+                        backgroundColor: Colors.blueGrey,
+                        child: Text(
+                          "0",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.blueGrey[800]
+                              : Colors.blueGrey[50],
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Text(
+                          "NO PARTY",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          _selectedParty = null;
+                          _isPartySelected = true;
+                        });
+                      },
+                    ),
+                    const Divider(height: 1, thickness: 1),
+                  ],
+                );
+              }
+
+              final partyIndex = showNoParty ? index - 1 : index;
+              final party = filteredParties[partyIndex];
+              return Column(
+                children: [
+                  ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: isDark
+                          ? Colors.blueGrey[800]
+                          : Colors.blueGrey[200],
+                      child: Text(
+                        "${party['originalIndex'] + 1}",
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.blueGrey[800]
+                            : Colors.blueGrey[50],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        party['name'] ?? "",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _selectedParty = party;
+                        _isPartySelected = true;
+                      });
+                    },
+                  ),
+                  const Divider(height: 1, thickness: 1),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildMobileAppView(bool showBottomBar, double totalBill) {
+    if (!_isPartySelected) {
+      return GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        behavior: HitTestBehavior.translucent,
+        child: _buildPartySelectionView(),
+      );
+    }
+
+    String selectedPartyName = _selectedParty != null
+        ? (_selectedParty!['name'] ?? "NO PARTY")
+        : "NO PARTY";
+
     return GestureDetector(
       onTap: () {
         FocusScope.of(context).unfocus();
@@ -2386,6 +2691,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
       behavior: HitTestBehavior.translucent,
       child: Column(
         children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.blueGrey[800]
+                : Colors.blueGrey[100],
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 8,
+                  child: Text(
+                    "PARTY : $selectedPartyName",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _isPartySelected = false;
+                      });
+                    },
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Icon(Icons.arrow_back, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          "BACK",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(child: _buildMiddleLayout()),
           if (showBottomBar)
             Container(
@@ -3394,7 +3745,7 @@ class _SetupScreenState extends State<SetupScreen> {
                       const SizedBox(height: 20),
 
                       const Text(
-                        "SHOP NAME ( Will be displayed at top in BILL)",
+                        "ENTER SHOP NAME (Will be displayed at top in BILL)",
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -3409,7 +3760,7 @@ class _SetupScreenState extends State<SetupScreen> {
                           ),
                         ],
                         decoration: InputDecoration(
-                          hintText: "Enter Shop Name",
+                          hintText: "Shop Name (In English Only)...",
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -3949,6 +4300,266 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final TextEditingController _historySearchController =
       TextEditingController();
 
+  int _viewMonth = DateTime.now().month;
+  int _viewYear = DateTime.now().year;
+
+  bool _isCustomMode = false;
+  DateTime? _customFrom;
+  DateTime? _customTo;
+  bool _isAllMode = false;
+
+  DateTime? oldestBillDate;
+
+  static const _months = [
+    "JAN",
+    "FEB",
+    "MAR",
+    "APR",
+    "MAY",
+    "JUN",
+    "JUL",
+    "AUG",
+    "SEP",
+    "OCT",
+    "NOV",
+    "DEC",
+  ];
+
+  DateTime? _parseDate(String dateStr) {
+    try {
+      final parts = dateStr.split('-');
+      if (parts.length == 3) {
+        return DateTime(
+          int.parse(parts[2]),
+          int.parse(parts[1]),
+          int.parse(parts[0]),
+        );
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _showCustomRangePopup() {
+    final fromCtrl = TextEditingController();
+    final toCtrl = TextEditingController();
+    bool useCurrentDateForTo = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final RegExp dateRegExp = RegExp(
+              r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+            );
+            bool isValid =
+                fromCtrl.text.isNotEmpty &&
+                toCtrl.text.isNotEmpty &&
+                dateRegExp.hasMatch(fromCtrl.text.trim()) &&
+                dateRegExp.hasMatch(toCtrl.text.trim());
+
+            if (isValid) {
+              DateTime? fromD = _parseDate(fromCtrl.text.trim());
+              DateTime? toD = _parseDate(toCtrl.text.trim());
+              if (fromD != null && toD != null && fromD.isAfter(toD)) {
+                isValid = false;
+              }
+            }
+
+            return Dialog(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: Platform.isWindows ? 400 : double.infinity,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(15.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: fromCtrl,
+                        onChanged: (_) => setDialogState(() {}),
+                        keyboardType: TextInputType.datetime,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: "FROM (In DD-MM-YYYY)",
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            "TO : CURRENT DATE",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Checkbox(
+                            value: useCurrentDateForTo,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                useCurrentDateForTo = val ?? false;
+                                if (useCurrentDateForTo) {
+                                  toCtrl.text = DateFormat(
+                                    'dd-MM-yyyy',
+                                  ).format(DateTime.now());
+                                } else {
+                                  toCtrl.clear();
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      TextField(
+                        controller: toCtrl,
+                        enabled: !useCurrentDateForTo,
+                        onChanged: (_) => setDialogState(() {}),
+                        keyboardType: TextInputType.datetime,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: "TO (In DD-MM-YYYY)",
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isValid
+                                    ? Colors.green
+                                    : Colors.grey[300],
+                                foregroundColor: Colors.black,
+                              ),
+                              onPressed: !isValid
+                                  ? null
+                                  : () {
+                                      Navigator.pop(context);
+                                      setState(() {
+                                        _customFrom = _parseDate(
+                                          fromCtrl.text.trim(),
+                                        );
+                                        _customTo = _parseDate(
+                                          toCtrl.text.trim(),
+                                        );
+                                        _isCustomMode = true;
+                                        _isAllMode = false;
+                                        _applyFilters();
+                                      });
+                                    },
+                              child: const Text(
+                                "APPLY",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.black,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text(
+                                "CANCEL",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _setOldestDateAndApplyFilters() {
+    if (_allPdfFiles.isNotEmpty) {
+      final lastFile = _allPdfFiles.last;
+      String name = lastFile is File
+          ? lastFile.path.split(Platform.pathSeparator).last
+          : (lastFile as saf.DocumentFile).name ?? "";
+      if (name.length >= 8) {
+        try {
+          oldestBillDate = DateTime(
+            int.parse(name.substring(0, 4)),
+            int.parse(name.substring(4, 6)),
+            int.parse(name.substring(6, 8)),
+          );
+        } catch (_) {}
+      }
+    }
+    if (oldestBillDate == null) {
+      oldestBillDate = DateTime.now();
+    }
+    _applyFilters();
+  }
+
+  void _applyFilters() {
+    setState(() {
+      _filteredPdfFiles = _allPdfFiles.where((file) {
+        String name = file is File
+            ? file.path.split(Platform.pathSeparator).last
+            : (file as saf.DocumentFile).name ?? "";
+
+        DateTime? fileDate;
+        if (name.length >= 8) {
+          try {
+            fileDate = DateTime(
+              int.parse(name.substring(0, 4)),
+              int.parse(name.substring(4, 6)),
+              int.parse(name.substring(6, 8)),
+            );
+          } catch (_) {}
+        }
+
+        bool passDate = true;
+        if (fileDate != null) {
+          if (_isAllMode) {
+            passDate = true;
+          } else if (_isCustomMode &&
+              _customFrom != null &&
+              _customTo != null) {
+            passDate =
+                !fileDate.isBefore(_customFrom!) &&
+                !fileDate.isAfter(
+                  _customTo!
+                      .add(const Duration(days: 1))
+                      .subtract(const Duration(milliseconds: 1)),
+                );
+          } else {
+            passDate =
+                fileDate.year == _viewYear && fileDate.month == _viewMonth;
+          }
+        } else {
+          passDate = _isAllMode;
+        }
+
+        if (!passDate) return false;
+
+        String query = _historySearchController.text.trim().toLowerCase();
+        if (query.isEmpty) return true;
+
+        String printableName = _parseInvoiceNameForDisplay(name).toLowerCase();
+        return printableName.contains(query);
+      }).toList();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -3968,15 +4579,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             .toList();
 
         loadedFiles.sort((a, b) {
-          final aDate = a.lastModifiedSync();
-          final bDate = b.lastModifiedSync();
-          return bDate.compareTo(aDate);
+          final aName = a.path.split('\\').last;
+          final bName = b.path.split('\\').last;
+          return bName.compareTo(aName);
         });
 
-        setState(() {
-          _allPdfFiles = loadedFiles;
-          _filteredPdfFiles = loadedFiles;
-        });
+        _allPdfFiles = loadedFiles;
+        _setOldestDateAndApplyFilters();
       }
       return;
     }
@@ -4000,34 +4609,18 @@ class _HistoryScreenState extends State<HistoryScreen> {
       }
 
       loadedFiles.sort((a, b) {
-        final aDate = a.lastModified ?? DateTime(2000);
-        final bDate = b.lastModified ?? DateTime(2000);
-        return bDate.compareTo(aDate);
+        final aName = a.name ?? "";
+        final bName = b.name ?? "";
+        return bName.compareTo(aName);
       });
 
-      setState(() {
-        _allPdfFiles = loadedFiles;
-        _filteredPdfFiles = loadedFiles;
-      });
+      _allPdfFiles = loadedFiles;
+      _setOldestDateAndApplyFilters();
     }
   }
 
   void _historySearchChanged(String query) {
-    if (query.trim().isEmpty) {
-      setState(() {
-        _filteredPdfFiles = _allPdfFiles;
-      });
-      return;
-    }
-    setState(() {
-      _filteredPdfFiles = _allPdfFiles.where((file) {
-        String name = file is File
-            ? file.path.split(Platform.pathSeparator).last
-            : (file as saf.DocumentFile).name ?? "";
-        String printableName = _parseInvoiceNameForDisplay(name).toLowerCase();
-        return printableName.contains(query.toLowerCase());
-      }).toList();
-    });
+    _applyFilters();
   }
 
   String _parseInvoiceNameForDisplay(String fullPath) {
@@ -4110,6 +4703,238 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 ),
               ),
             ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.blueGrey[900]
+                : Colors.blueGrey[200],
+            child: _isCustomMode
+                ? Row(
+                    children: [
+                      Text(
+                        "CUSTOM RANGE : FROM ${_customFrom!.day.toString().padLeft(2, '0')}-${_customFrom!.month.toString().padLeft(2, '0')}-${_customFrom!.year} TO ${_customTo!.day.toString().padLeft(2, '0')}-${_customTo!.month.toString().padLeft(2, '0')}-${_customTo!.year}",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          setState(() {
+                            _isCustomMode = false;
+                            _viewMonth = DateTime.now().month;
+                            _viewYear = DateTime.now().year;
+                            _applyFilters();
+                          });
+                        },
+                      ),
+                    ],
+                  )
+                : _isAllMode
+                ? Row(
+                    children: [
+                      const Text(
+                        "ALL TRANSACTIONS",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          setState(() {
+                            _isAllMode = false;
+                            _viewMonth = DateTime.now().month;
+                            _viewYear = DateTime.now().year;
+                            _applyFilters();
+                          });
+                        },
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: FittedBox(
+                          alignment: Alignment.centerLeft,
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            "CURRENT MONTH : ${_months[_viewMonth - 1]} $_viewYear",
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: Platform.isWindows
+                              ? const EdgeInsets.symmetric(horizontal: 8)
+                              : const EdgeInsets.all(8),
+                          minimumSize: Platform.isWindows
+                              ? Size.zero
+                              : const Size(40, 40),
+                          tapTargetSize: Platform.isWindows
+                              ? MaterialTapTargetSize.shrinkWrap
+                              : MaterialTapTargetSize.padded,
+                          foregroundColor:
+                              (_viewYear == oldestBillDate?.year &&
+                                  _viewMonth == oldestBillDate?.month)
+                              ? Colors.grey
+                              : (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white
+                                    : Colors.black),
+                        ),
+                        onPressed:
+                            (_viewYear == oldestBillDate?.year &&
+                                _viewMonth == oldestBillDate?.month)
+                            ? null
+                            : () {
+                                setState(() {
+                                  if (_viewMonth == 1) {
+                                    _viewMonth = 12;
+                                    _viewYear--;
+                                  } else {
+                                    _viewMonth--;
+                                  }
+                                  _applyFilters();
+                                });
+                              },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.arrow_back_ios,
+                              size: 14,
+                              color:
+                                  (_viewYear == oldestBillDate?.year &&
+                                      _viewMonth == oldestBillDate?.month)
+                                  ? Colors.grey
+                                  : null,
+                            ),
+                            if (Platform.isWindows)
+                              const Text(
+                                " PREVIOUS MONTH",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: Platform.isWindows
+                              ? const EdgeInsets.symmetric(horizontal: 8)
+                              : const EdgeInsets.all(8),
+                          minimumSize: Platform.isWindows
+                              ? Size.zero
+                              : const Size(40, 40),
+                          tapTargetSize: Platform.isWindows
+                              ? MaterialTapTargetSize.shrinkWrap
+                              : MaterialTapTargetSize.padded,
+                          foregroundColor:
+                              (_viewYear == DateTime.now().year &&
+                                  _viewMonth == DateTime.now().month)
+                              ? Colors.grey
+                              : (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white
+                                    : Colors.black),
+                        ),
+                        onPressed:
+                            (_viewYear == DateTime.now().year &&
+                                _viewMonth == DateTime.now().month)
+                            ? null
+                            : () {
+                                setState(() {
+                                  if (_viewMonth == 12) {
+                                    _viewMonth = 1;
+                                    _viewYear++;
+                                  } else {
+                                    _viewMonth++;
+                                  }
+                                  _applyFilters();
+                                });
+                              },
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (Platform.isWindows)
+                              const Text(
+                                "NEXT MONTH ",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            Icon(
+                              Icons.arrow_forward_ios,
+                              size: 14,
+                              color:
+                                  (_viewYear == DateTime.now().year &&
+                                      _viewMonth == DateTime.now().month)
+                                  ? Colors.grey
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      ElevatedButton(
+                        onPressed: () {
+                          setState(() {
+                            _isAllMode = true;
+                            _applyFilters();
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: const Size(0, 30),
+                        ),
+                        child: const Text(
+                          "ALL",
+                          style: TextStyle(fontSize: 10),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      ElevatedButton(
+                        onPressed: _showCustomRangePopup,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          minimumSize: const Size(0, 30),
+                        ),
+                        child: const Text(
+                          "CUSTOM",
+                          style: TextStyle(fontSize: 10),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          setState(() {
+                            _viewMonth = DateTime.now().month;
+                            _viewYear = DateTime.now().year;
+                            _applyFilters();
+                          });
+                        },
+                      ),
+                    ],
+                  ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(
@@ -5625,8 +6450,13 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         controller: nameController,
                         onChanged: (_) => checkFields(),
                         textCapitalization: TextCapitalization.words,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[a-zA-Z0-9\s\-.,()&/\\]'),
+                          ),
+                        ],
                         decoration: const InputDecoration(
-                          hintText: "Name of Party",
+                          hintText: "NAME OF PARTY (In English Only)...",
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -6086,8 +6916,11 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                       ),
                                       child: Text(
                                         pName,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontWeight: FontWeight.bold,
+                                          color: isDark
+                                              ? Colors.white
+                                              : Colors.black87,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -6700,6 +7533,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   void _showCustomRangePopup() {
     final fromCtrl = TextEditingController();
     final toCtrl = TextEditingController();
+    bool useCurrentDateForTo = false;
 
     showDialog(
       context: context,
@@ -6745,8 +7579,36 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            "TO : CURRENT DATE",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Checkbox(
+                            value: useCurrentDateForTo,
+                            onChanged: (val) {
+                              setDialogState(() {
+                                useCurrentDateForTo = val ?? false;
+                                if (useCurrentDateForTo) {
+                                  toCtrl.text = DateFormat(
+                                    'dd-MM-yyyy',
+                                  ).format(DateTime.now());
+                                } else {
+                                  toCtrl.clear();
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
                       TextField(
                         controller: toCtrl,
+                        enabled: !useCurrentDateForTo,
                         onChanged: (_) => setDialogState(() {}),
                         keyboardType: TextInputType.datetime,
                         inputFormatters: [
@@ -6781,7 +7643,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                       Navigator.pop(context);
                                     },
                               child: const Text(
-                                "NEXT",
+                                "APPLY",
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
