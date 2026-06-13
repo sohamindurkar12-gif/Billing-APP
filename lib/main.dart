@@ -814,6 +814,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isPartySelected = false;
   Map<String, dynamic>? _selectedParty;
   final TextEditingController _partySearchController = TextEditingController();
+  String _partyTransactionType = "SALES";
 
   // Keyboard shortcut state (Windows only)
   String _keyBuffer = "";
@@ -993,8 +994,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String customerName,
     bool showRateColumn,
     String dateString,
-    String timeString,
-  ) async {
+    String timeString, [
+    bool addToLedger = false,
+  ]) async {
     if (_cart.isEmpty) return;
     final pdf = pw.Document();
 
@@ -1152,6 +1154,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
+    if (addToLedger && _isPartySelected && _selectedParty != null) {
+      if (_selectedParty!['transactions'] == null) {
+        _selectedParty!['transactions'] = <Map<String, dynamic>>[];
+      }
+
+      Map<String, dynamic> newTx = {
+        'date': dateString,
+        'type': _partyTransactionType,
+        'debit': _partyTransactionType == "SALES" ? grandTotal : 0.0,
+        'credit': _partyTransactionType == "PURCHASE" ? grandTotal : 0.0,
+      };
+      _selectedParty!['transactions'].add(newTx);
+      await LocalDatabase.savePartiesToDisk();
+    }
+
     if (Platform.isWindows) {
       String baseDir = File(Platform.resolvedExecutable).parent.path;
       String dir = "$baseDir\\Billing APP\\MYBILLS";
@@ -1165,6 +1182,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() {
           _cart = [];
           _isPartySelected = false;
+          _partyTransactionType = "SALES";
         });
       }
       return;
@@ -1185,6 +1203,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() {
           _cart = [];
           _isPartySelected = false;
+          _partyTransactionType = "SALES";
         });
       }
     }
@@ -1200,10 +1219,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     bool isNameTyped = false;
+    bool addToLedger = true;
+    DateTime? openingDate;
 
     if (_isPartySelected && _selectedParty != null) {
       nameController.text = _selectedParty!['name'] ?? "";
       isNameTyped = true;
+      String oDateStr = _selectedParty!['opening_date'] ?? "";
+      if (oDateStr.isNotEmpty) {
+        try {
+          List<String> parts = oDateStr.split('-');
+          openingDate = DateTime(
+            int.parse(parts[2]),
+            int.parse(parts[1]),
+            int.parse(parts[0]),
+          );
+        } catch (_) {}
+      }
     }
     bool isDateValid = true;
     bool isTimeValid = true;
@@ -1216,6 +1248,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setPopupState(() {
         isDateValid = dateRegex.hasMatch(dateController.text.trim());
         isTimeValid = timeRegex.hasMatch(timeController.text.trim());
+
+        if (isDateValid &&
+            _isPartySelected &&
+            _selectedParty != null &&
+            addToLedger &&
+            openingDate != null) {
+          try {
+            List<String> parts = dateController.text.trim().split('-');
+            DateTime enteredDate = DateTime(
+              int.parse(parts[2]),
+              int.parse(parts[1]),
+              int.parse(parts[0]),
+            );
+            if (enteredDate.isBefore(openingDate!)) {
+              isDateValid = false;
+            }
+          } catch (_) {}
+        }
       });
     }
 
@@ -1417,6 +1467,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                       ),
+                      if (_isPartySelected && _selectedParty != null) ...[
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: () {
+                            setPopupState(() {
+                              addToLedger = !addToLedger;
+                              if (addToLedger) {
+                                try {
+                                  List<String> parts = dateController.text
+                                      .trim()
+                                      .split('-');
+                                  DateTime enteredDate = DateTime(
+                                    int.parse(parts[2]),
+                                    int.parse(parts[1]),
+                                    int.parse(parts[0]),
+                                  );
+                                  if (openingDate != null &&
+                                      enteredDate.isBefore(openingDate!)) {
+                                    dateController.clear();
+                                  }
+                                } catch (_) {}
+                              }
+                              validateDateTime(setPopupState);
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  "ADD ENTRY TO LEDGER",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.blueGrey[200]
+                                        : Colors.blueGrey,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Checkbox(
+                                  value: addToLedger,
+                                  activeColor:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.blueGrey[400]
+                                      : Colors.blueGrey[800],
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  onChanged: (val) {
+                                    setPopupState(() {
+                                      addToLedger = val ?? true;
+                                      if (addToLedger) {
+                                        try {
+                                          List<String> parts = dateController
+                                              .text
+                                              .trim()
+                                              .split('-');
+                                          DateTime enteredDate = DateTime(
+                                            int.parse(parts[2]),
+                                            int.parse(parts[1]),
+                                            int.parse(parts[0]),
+                                          );
+                                          if (openingDate != null &&
+                                              enteredDate.isBefore(
+                                                openingDate!,
+                                              )) {
+                                            dateController.clear();
+                                          }
+                                        } catch (_) {}
+                                      }
+                                      validateDateTime(setPopupState);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -1443,6 +1578,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           globalShowRateSetting,
                                           dateController.text.trim(),
                                           timeController.text.trim(),
+                                          addToLedger,
                                         );
                                       },
                                 child: const Text(
@@ -2552,17 +2688,164 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         Container(
           padding: const EdgeInsets.all(12),
-          child: TextField(
-            controller: _partySearchController,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: "SEARCH PARTY...",
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(15),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 80,
+                child: TextField(
+                  controller: _partySearchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: "SEARCH PARTY...",
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                ),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 20,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 25,
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: _partyTransactionType == "SALES"
+                              ? (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.blueGrey[200]
+                                    : Colors.blueGrey[800])
+                              : (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.blueGrey[800]
+                                    : Colors.blueGrey[50]),
+                          foregroundColor: _partyTransactionType == "SALES"
+                              ? (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.black
+                                    : Colors.white)
+                              : (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white
+                                    : Colors.blueGrey[900]),
+                          elevation: _partyTransactionType == "SALES" ? 2 : 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: _partyTransactionType == "SALES"
+                                  ? Colors.transparent
+                                  : (Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.blueGrey[700]!
+                                        : Colors.blueGrey.shade200),
+                            ),
+                          ),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _partyTransactionType = "SALES";
+                          });
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              "SALES",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                            if (_partyTransactionType == "SALES") ...[
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.check,
+                                size: 12,
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.black
+                                    : Colors.white,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      height: 25,
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: _partyTransactionType == "PURCHASE"
+                              ? (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.blueGrey[200]
+                                    : Colors.blueGrey[800])
+                              : (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.blueGrey[800]
+                                    : Colors.blueGrey[50]),
+                          foregroundColor: _partyTransactionType == "PURCHASE"
+                              ? (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.black
+                                    : Colors.white)
+                              : (Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.white
+                                    : Colors.blueGrey[900]),
+                          elevation: _partyTransactionType == "PURCHASE"
+                              ? 2
+                              : 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: _partyTransactionType == "PURCHASE"
+                                  ? Colors.transparent
+                                  : (Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.blueGrey[700]!
+                                        : Colors.blueGrey.shade200),
+                            ),
+                          ),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _partyTransactionType = "PURCHASE";
+                          });
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              "PURCHASE",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                            if (_partyTransactionType == "PURCHASE") ...[
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.check,
+                                size: 12,
+                                color:
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.black
+                                    : Colors.white,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         const Divider(height: 1, thickness: 1),
@@ -2699,7 +2982,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Row(
               children: [
                 Expanded(
-                  flex: 8,
+                  flex: 6,
                   child: Text(
                     "PARTY : $selectedPartyName",
                     style: const TextStyle(
@@ -2712,25 +2995,114 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 Expanded(
                   flex: 2,
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _isPartySelected = false;
-                      });
-                    },
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Icon(Icons.arrow_back, size: 16),
-                        SizedBox(width: 4),
-                        Text(
-                          "BACK",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                  child: SizedBox(
+                    height: 25,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        backgroundColor:
+                            Theme.of(context).brightness == Brightness.dark
+                            ? Colors.blueGrey[800]
+                            : Colors.blueGrey[50],
+                        foregroundColor:
+                            Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.blueGrey[900],
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blueGrey[700]!
+                                : Colors.blueGrey.shade200,
                           ),
                         ),
-                      ],
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _isPartySelected = false;
+                        });
+                      },
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            "CHANGE",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 8,
+                              height: 1.1,
+                            ),
+                          ),
+                          Text(
+                            "PARTY",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 8,
+                              height: 1.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  flex: 2,
+                  child: SizedBox(
+                    height: 25,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        backgroundColor:
+                            Theme.of(context).brightness == Brightness.dark
+                            ? Colors.blueGrey[800]
+                            : Colors.blueGrey[50],
+                        foregroundColor:
+                            Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.blueGrey[900],
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: BorderSide(
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blueGrey[700]!
+                                : Colors.blueGrey.shade200,
+                          ),
+                        ),
+                      ),
+                      onPressed: () async {
+                        if (_cart.isNotEmpty) {
+                          bool confirm = await _showConfirmationWarning(
+                            context,
+                            "Taking Back will clear all items currently in your cart. Do you want to proceed?",
+                          );
+                          if (!confirm) return;
+                        }
+                        setState(() {
+                          _cart.clear();
+                          _isPartySelected = false;
+                          _partyTransactionType = "SALES";
+                        });
+                      },
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.arrow_back, size: 12),
+                          SizedBox(width: 2),
+                          Text(
+                            "BACK",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
