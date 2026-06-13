@@ -20,6 +20,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 
 void main() async {
   // Ensures all Flutter components are completely bound and ready before modifying platform UI settings
@@ -61,10 +62,13 @@ void main() async {
   if (Platform.isWindows) {
     try {
       await windowManager.ensureInitialized();
-      WindowOptions windowOptions = const WindowOptions(
-        size: Size(1300, 850),
-        minimumSize: Size(1300, 850),
-        maximumSize: Size(1300, 850),
+      Display primaryDisplay = await screenRetriever.getPrimaryDisplay();
+      Size screenSize = primaryDisplay.visibleSize ?? primaryDisplay.size;
+
+      WindowOptions windowOptions = WindowOptions(
+        size: screenSize,
+        minimumSize: screenSize,
+        maximumSize: screenSize,
         center: true,
         title: "BILLING APP",
       );
@@ -3286,7 +3290,15 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   ),
                   const Text(
-                    "TO BECOME VIP USER CONTACT",
+                    "ONLY VIP USERS CAN USE CLOUD SYNC",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Text(
+                    "TO BECOME VIP USER PLS CONTACT",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.red,
