@@ -796,6 +796,49 @@ class CloudDatabase {
       debugPrint("Error loading settings from cloud: $e");
     }
   }
+
+  // Sync accounts to Firestore under the current user's UID
+  static Future<void> syncAccountsToCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('accounts')
+          .set({
+            'parties': globalParties,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      debugPrint("Error syncing accounts to cloud: $e");
+    }
+  }
+
+  // Load accounts from Firestore for the current user
+  static Future<void> loadAccountsFromCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      final doc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('accounts')
+          .get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data['parties'] != null) {
+          globalParties = List<Map<String, dynamic>>.from(data['parties']);
+          // Also save to local disk
+          await LocalDatabase.savePartiesToDisk();
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading accounts from cloud: $e");
+    }
+  }
 }
 
 class DashboardScreen extends StatefulWidget {
@@ -1173,14 +1216,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_selectedParty!['transactions'] == null) {
         _selectedParty!['transactions'] = <Map<String, dynamic>>[];
       }
-      
+
       if (_isEditingBill) {
-        int txIndex = _selectedParty!['transactions'].indexWhere((tx) => tx['billId'] == currentBillId);
+        int txIndex = _selectedParty!['transactions'].indexWhere(
+          (tx) => tx['billId'] == currentBillId,
+        );
         if (txIndex != -1) {
           _selectedParty!['transactions'][txIndex]['date'] = dateString;
-          _selectedParty!['transactions'][txIndex]['type'] = _partyTransactionType;
-          _selectedParty!['transactions'][txIndex]['debit'] = _partyTransactionType == "SALES" ? grandTotal : 0.0;
-          _selectedParty!['transactions'][txIndex]['credit'] = _partyTransactionType == "PURCHASE" ? grandTotal : 0.0;
+          _selectedParty!['transactions'][txIndex]['type'] =
+              _partyTransactionType;
+          _selectedParty!['transactions'][txIndex]['debit'] =
+              _partyTransactionType == "SALES" ? grandTotal : 0.0;
+          _selectedParty!['transactions'][txIndex]['credit'] =
+              _partyTransactionType == "PURCHASE" ? grandTotal : 0.0;
         } else {
           _selectedParty!['transactions'].add({
             'billId': currentBillId,
@@ -1219,22 +1267,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       String jsonDir = "$dir\\JSON Bills";
       Directory(dir).createSync(recursive: true);
       Directory(jsonDir).createSync(recursive: true);
-      
+
       if (_isEditingBill && _editingOriginalPdfName != null) {
         String oldPdfPath = "$dir\\$_editingOriginalPdfName";
-        String oldJsonPath = "$jsonDir\\${_editingOriginalPdfName!.replaceAll('.pdf', '.json')}";
+        String oldJsonPath =
+            "$jsonDir\\${_editingOriginalPdfName!.replaceAll('.pdf', '.json')}";
         if (File(oldPdfPath).existsSync()) File(oldPdfPath).deleteSync();
         if (File(oldJsonPath).existsSync()) File(oldJsonPath).deleteSync();
       }
-      
+
       File file = File("$dir\\$finalFileName.pdf");
       await file.writeAsBytes(await pdf.save());
-      
+
       File jFile = File("$jsonDir\\$finalFileName.json");
       await jFile.writeAsString(jsonString);
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf",
+            ),
+          ),
+        );
         setState(() {
           _cart = [];
           _isPartySelected = false;
@@ -1253,7 +1308,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final pathUri = await LocalDatabase.getMyBillsFolderUri();
     if (pathUri != null) {
       if (_isEditingBill && _editingOriginalPdfName != null) {
-        final docs = await saf.listFiles(pathUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+        final docs = await saf
+            .listFiles(
+              pathUri,
+              columns: [
+                saf.DocumentFileColumn.displayName,
+                saf.DocumentFileColumn.id,
+              ],
+            )
+            .toList();
         for (var doc in docs) {
           if (doc.name == _editingOriginalPdfName) {
             await saf.delete(doc.uri);
@@ -1267,9 +1330,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         displayName: "$finalFileName.pdf",
         bytes: await pdf.save(),
       );
-      
+
       Uri? jsonBillsUri;
-      final childDocs = await saf.listFiles(pathUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+      final childDocs = await saf
+          .listFiles(
+            pathUri,
+            columns: [
+              saf.DocumentFileColumn.displayName,
+              saf.DocumentFileColumn.id,
+            ],
+          )
+          .toList();
       for (var doc in childDocs) {
         if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
           jsonBillsUri = doc.uri;
@@ -1280,18 +1351,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final newDir = await saf.createDirectory(pathUri, "JSON Bills");
         jsonBillsUri = newDir?.uri;
       }
-      
+
       if (jsonBillsUri != null) {
         if (_isEditingBill && _editingOriginalPdfName != null) {
-          final oldJsonName = _editingOriginalPdfName!.replaceAll('.pdf', '.json');
-          final jsonDocs = await saf.listFiles(jsonBillsUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+          final oldJsonName = _editingOriginalPdfName!.replaceAll(
+            '.pdf',
+            '.json',
+          );
+          final jsonDocs = await saf
+              .listFiles(
+                jsonBillsUri,
+                columns: [
+                  saf.DocumentFileColumn.displayName,
+                  saf.DocumentFileColumn.id,
+                ],
+              )
+              .toList();
           for (var doc in jsonDocs) {
             if (doc.name == oldJsonName) {
               await saf.delete(doc.uri);
             }
           }
         }
-        
+
         await saf.createFileAsString(
           jsonBillsUri,
           mimeType: 'application/json',
@@ -1301,7 +1383,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf",
+            ),
+          ),
+        );
         setState(() {
           _cart = [];
           _isPartySelected = false;
@@ -1320,10 +1408,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showCustomerNamePopup() {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController dateController = TextEditingController(
-      text: _isEditingBill && _editingBillDate != null ? _editingBillDate : DateFormat('dd-MM-yyyy').format(DateTime.now()),
+      text: _isEditingBill && _editingBillDate != null
+          ? _editingBillDate
+          : DateFormat('dd-MM-yyyy').format(DateTime.now()),
     );
     final TextEditingController timeController = TextEditingController(
-      text: _isEditingBill && _editingBillTime != null ? _editingBillTime : DateFormat('HH:mm:ss').format(DateTime.now()),
+      text: _isEditingBill && _editingBillTime != null
+          ? _editingBillTime
+          : DateFormat('HH:mm:ss').format(DateTime.now()),
     );
 
     bool isNameTyped = false;
@@ -1344,7 +1436,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         } catch (_) {}
       }
-    } else if (_isEditingBill && _editingCustomerName != null && _editingCustomerName != "NO PARTY") {
+    } else if (_isEditingBill &&
+        _editingCustomerName != null &&
+        _editingCustomerName != "NO PARTY") {
       nameController.text = _editingCustomerName!;
       if (_editingCustomerName!.isNotEmpty) isNameTyped = true;
     }
@@ -1582,28 +1676,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (_isPartySelected && _selectedParty != null) ...[
                         const SizedBox(height: 12),
                         InkWell(
-                          onTap: _isEditingBill ? null : () {
-                            setPopupState(() {
-                              addToLedger = !addToLedger;
-                              if (addToLedger) {
-                                try {
-                                  List<String> parts = dateController.text
-                                      .trim()
-                                      .split('-');
-                                  DateTime enteredDate = DateTime(
-                                    int.parse(parts[2]),
-                                    int.parse(parts[1]),
-                                    int.parse(parts[0]),
-                                  );
-                                  if (openingDate != null &&
-                                      enteredDate.isBefore(openingDate!)) {
-                                    dateController.clear();
-                                  }
-                                } catch (_) {}
-                              }
-                              validateDateTime(setPopupState);
-                            });
-                          },
+                          onTap: _isEditingBill
+                              ? null
+                              : () {
+                                  setPopupState(() {
+                                    addToLedger = !addToLedger;
+                                    if (addToLedger) {
+                                      try {
+                                        List<String> parts = dateController.text
+                                            .trim()
+                                            .split('-');
+                                        DateTime enteredDate = DateTime(
+                                          int.parse(parts[2]),
+                                          int.parse(parts[1]),
+                                          int.parse(parts[0]),
+                                        );
+                                        if (openingDate != null &&
+                                            enteredDate.isBefore(
+                                              openingDate!,
+                                            )) {
+                                          dateController.clear();
+                                        }
+                                      } catch (_) {}
+                                    }
+                                    validateDateTime(setPopupState);
+                                  });
+                                },
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4.0),
                             child: Row(
@@ -1633,31 +1731,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       : Colors.blueGrey[800],
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
-                                  onChanged: _isEditingBill ? null : (val) {
-                                    setPopupState(() {
-                                      addToLedger = val ?? true;
-                                      if (addToLedger) {
-                                        try {
-                                          List<String> parts = dateController
-                                              .text
-                                              .trim()
-                                              .split('-');
-                                          DateTime enteredDate = DateTime(
-                                            int.parse(parts[2]),
-                                            int.parse(parts[1]),
-                                            int.parse(parts[0]),
-                                          );
-                                          if (openingDate != null &&
-                                              enteredDate.isBefore(
-                                                openingDate!,
-                                              )) {
-                                            dateController.clear();
-                                          }
-                                        } catch (_) {}
-                                      }
-                                      validateDateTime(setPopupState);
-                                    });
-                                  },
+                                  onChanged: _isEditingBill
+                                      ? null
+                                      : (val) {
+                                          setPopupState(() {
+                                            addToLedger = val ?? true;
+                                            if (addToLedger) {
+                                              try {
+                                                List<String> parts =
+                                                    dateController.text
+                                                        .trim()
+                                                        .split('-');
+                                                DateTime enteredDate = DateTime(
+                                                  int.parse(parts[2]),
+                                                  int.parse(parts[1]),
+                                                  int.parse(parts[0]),
+                                                );
+                                                if (openingDate != null &&
+                                                    enteredDate.isBefore(
+                                                      openingDate!,
+                                                    )) {
+                                                  dateController.clear();
+                                                }
+                                              } catch (_) {}
+                                            }
+                                            validateDateTime(setPopupState);
+                                          });
+                                        },
                                 ),
                               ],
                             ),
@@ -1814,7 +1914,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isFirstTapQty = true;
     bool isFirstTapRate = true;
 
-    String baseName = (item['name'] ?? "").replaceAll(RegExp(r'[\r\n]'), ' ').trim();
+    String baseName = (item['name'] ?? "")
+        .replaceAll(RegExp(r'[\r\n]'), ' ')
+        .trim();
     String completeDisplayName = baseName;
 
     final FocusNode numpadFocusNode = FocusNode();
@@ -3110,27 +3212,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        backgroundColor: _isEditingBill ? Colors.grey[300] : (Theme.of(context).brightness == Brightness.dark
-                            ? Colors.blueGrey[800]
-                            : Colors.blueGrey[50]),
-                        foregroundColor: _isEditingBill ? Colors.grey[500] : (Theme.of(context).brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.blueGrey[900]),
+                        backgroundColor: _isEditingBill
+                            ? Colors.grey[300]
+                            : (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.blueGrey[800]
+                                  : Colors.blueGrey[50]),
+                        foregroundColor: _isEditingBill
+                            ? Colors.grey[500]
+                            : (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white
+                                  : Colors.blueGrey[900]),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                           side: BorderSide(
-                            color: _isEditingBill ? Colors.transparent : (Theme.of(context).brightness == Brightness.dark
-                                ? Colors.blueGrey[700]!
-                                : Colors.blueGrey.shade200),
+                            color: _isEditingBill
+                                ? Colors.transparent
+                                : (Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.blueGrey[700]!
+                                      : Colors.blueGrey.shade200),
                           ),
                         ),
                       ),
-                      onPressed: _isEditingBill ? null : () {
-                        setState(() {
-                          _isPartySelected = false;
-                        });
-                      },
+                      onPressed: _isEditingBill
+                          ? null
+                          : () {
+                              setState(() {
+                                _isPartySelected = false;
+                              });
+                            },
                       child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -3453,7 +3564,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _loadBillForEditing(Map<String, dynamic> jsonBill, String originalPdfName) {
+  void _loadBillForEditing(
+    Map<String, dynamic> jsonBill,
+    String originalPdfName,
+  ) {
     setState(() {
       _cart = List<Map<String, dynamic>>.from(jsonBill['cart'] ?? []);
       _isPartySelected = true;
@@ -3585,6 +3699,7 @@ class _SetupScreenState extends State<SetupScreen> {
   Future<void> _exportAndShareFiles(
     bool shareInventory,
     bool shareSettings,
+    bool shareAccounts,
   ) async {
     try {
       List<XFile> filesToShare = [];
@@ -3613,6 +3728,14 @@ class _SetupScreenState extends State<SetupScreen> {
           File setFile = File("$dir\\app_settings.json");
           await setFile.writeAsBytes(bytes);
           filesToShare.add(XFile(setFile.path));
+        }
+
+        if (shareAccounts) {
+          final content = jsonEncode(globalParties);
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          File accFile = File("$dir\\party_details.json");
+          await accFile.writeAsBytes(bytes);
+          filesToShare.add(XFile(accFile.path));
         }
       } else {
         final backupUri = await LocalDatabase.getBackupsFolderUri();
@@ -3659,6 +3782,25 @@ class _SetupScreenState extends State<SetupScreen> {
           await tempSet.writeAsBytes(bytes);
           filesToShare.add(XFile(tempSet.path));
         }
+
+        if (shareAccounts) {
+          var accFile = await saf.child(backupUri, 'party_details.json');
+          final content = jsonEncode(globalParties);
+          final bytes = Uint8List.fromList(utf8.encode(content));
+          if (accFile == null) {
+            await saf.createFileAsBytes(
+              backupUri,
+              mimeType: 'application/json',
+              displayName: 'party_details.json',
+              bytes: bytes,
+            );
+          } else {
+            await saf.writeToFileAsBytes(accFile.uri, bytes: bytes);
+          }
+          final tempAcc = File("${tempDir.path}/party_details.json");
+          await tempAcc.writeAsBytes(bytes);
+          filesToShare.add(XFile(tempAcc.path));
+        }
       }
 
       if (filesToShare.isNotEmpty) {
@@ -3676,10 +3818,12 @@ class _SetupScreenState extends State<SetupScreen> {
   Future<void> _importLocalBackup(
     bool importInventory,
     bool importSettings,
+    bool importAccounts,
   ) async {
     try {
       bool inventorySuccess = false;
       bool settingsSuccess = false;
+      bool accountsSuccess = false;
 
       if (Platform.isWindows) {
         String baseDir = File(Platform.resolvedExecutable).parent.path;
@@ -3724,6 +3868,24 @@ class _SetupScreenState extends State<SetupScreen> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text("App settings backup file not found."),
+                ),
+              );
+          }
+        }
+
+        if (importAccounts) {
+          File accFile = File("$dir\\party_details.json");
+          if (accFile.existsSync()) {
+            final content = await accFile.readAsString();
+            List decoded = jsonDecode(content);
+            globalParties = List<Map<String, dynamic>>.from(decoded);
+            await LocalDatabase.savePartiesToDisk();
+            accountsSuccess = true;
+          } else {
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Accounts backup file not found."),
                 ),
               );
           }
@@ -3781,9 +3943,30 @@ class _SetupScreenState extends State<SetupScreen> {
               );
           }
         }
+
+        if (importAccounts) {
+          var accFile = await saf.child(backupUri, 'party_details.json');
+          if (accFile != null) {
+            final bytes = await saf.getDocumentContent(accFile.uri);
+            if (bytes != null) {
+              final content = utf8.decode(bytes);
+              List decoded = jsonDecode(content);
+              globalParties = List<Map<String, dynamic>>.from(decoded);
+              await LocalDatabase.savePartiesToDisk();
+              accountsSuccess = true;
+            }
+          } else {
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Accounts backup file not found."),
+                ),
+              );
+          }
+        }
       }
 
-      if (inventorySuccess || settingsSuccess) {
+      if (inventorySuccess || settingsSuccess || accountsSuccess) {
         setState(() {});
         smartBillingAppKey.currentState?.rebuildApp();
         if (mounted) {
@@ -3831,6 +4014,7 @@ class _SetupScreenState extends State<SetupScreen> {
 
     bool exportInventory = false;
     bool exportSettings = false;
+    bool exportAccounts = false;
 
     if (!mounted) return;
 
@@ -3838,7 +4022,8 @@ class _SetupScreenState extends State<SetupScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          bool anySelected = exportInventory || exportSettings;
+          bool anySelected =
+              exportInventory || exportSettings || exportAccounts;
           return AlertDialog(
             title: const Center(
               child: Text(
@@ -3860,8 +4045,12 @@ class _SetupScreenState extends State<SetupScreen> {
                       children: [
                         Checkbox(
                           value: exportInventory,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: const VisualDensity(horizontal: 0, vertical: -4),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: const VisualDensity(
+                            horizontal: 0,
+                            vertical: -4,
+                          ),
                           onChanged: (val) {
                             setDialogState(
                               () => exportInventory = val ?? false,
@@ -3875,8 +4064,12 @@ class _SetupScreenState extends State<SetupScreen> {
                       children: [
                         Checkbox(
                           value: exportSettings,
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: const VisualDensity(horizontal: 0, vertical: -4),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: const VisualDensity(
+                            horizontal: 0,
+                            vertical: -4,
+                          ),
                           onChanged: (val) {
                             setDialogState(() => exportSettings = val ?? false);
                           },
@@ -3885,6 +4078,23 @@ class _SetupScreenState extends State<SetupScreen> {
                           "APP SETTINGS",
                           style: TextStyle(fontSize: 12),
                         ),
+                      ],
+                    ),
+                    Column(
+                      children: [
+                        Checkbox(
+                          value: exportAccounts,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: const VisualDensity(
+                            horizontal: 0,
+                            vertical: -4,
+                          ),
+                          onChanged: (val) {
+                            setDialogState(() => exportAccounts = val ?? false);
+                          },
+                        ),
+                        const Text("ACCOUNTS", style: TextStyle(fontSize: 12)),
                       ],
                     ),
                   ],
@@ -3937,6 +4147,8 @@ class _SetupScreenState extends State<SetupScreen> {
                                     await CloudDatabase.syncInventoryToCloud();
                                   if (exportSettings)
                                     await CloudDatabase.syncSettingsToCloud();
+                                  if (exportAccounts)
+                                    await CloudDatabase.syncAccountsToCloud();
                                   messenger.showSnackBar(
                                     const SnackBar(
                                       content: Text("Export complete!"),
@@ -3978,6 +4190,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                   _exportAndShareFiles(
                                     exportInventory,
                                     exportSettings,
+                                    exportAccounts,
                                   );
                                 },
                           style: ElevatedButton.styleFrom(
@@ -4050,6 +4263,8 @@ class _SetupScreenState extends State<SetupScreen> {
                                     smartBillingAppKey.currentState
                                         ?.rebuildApp();
                                   }
+                                  if (exportAccounts)
+                                    await CloudDatabase.loadAccountsFromCloud();
                                   messenger.showSnackBar(
                                     const SnackBar(
                                       content: Text("Import complete!"),
@@ -4091,6 +4306,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                   _importLocalBackup(
                                     exportInventory,
                                     exportSettings,
+                                    exportAccounts,
                                   );
                                 },
                           style: ElevatedButton.styleFrom(
@@ -4690,7 +4906,8 @@ class _SetupScreenState extends State<SetupScreen> {
 
 // --- WAREHOUSE SCREEN ---
 class WarehouseScreen extends StatelessWidget {
-  final Function(Map<String, dynamic> jsonBill, String originalPdfName)? onEditBill;
+  final Function(Map<String, dynamic> jsonBill, String originalPdfName)?
+  onEditBill;
 
   const WarehouseScreen({super.key, this.onEditBill});
   @override
@@ -4767,9 +4984,7 @@ class WarehouseScreen extends StatelessWidget {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => HistoryScreen(
-                      onEditBill: onEditBill,
-                    ),
+                    builder: (context) => HistoryScreen(onEditBill: onEditBill),
                   ),
                 ),
                 icon: const Icon(Icons.picture_as_pdf),
@@ -4810,7 +5025,8 @@ class WarehouseScreen extends StatelessWidget {
 
 // --- HISTORY SCREEN ---
 class HistoryScreen extends StatefulWidget {
-  final Function(Map<String, dynamic> jsonBill, String originalPdfName)? onEditBill;
+  final Function(Map<String, dynamic> jsonBill, String originalPdfName)?
+  onEditBill;
 
   const HistoryScreen({super.key, this.onEditBill});
   @override
@@ -4827,7 +5043,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ? file.path.split(Platform.pathSeparator).last
         : (file as saf.DocumentFile).name ?? "";
     if (pdfName.isEmpty) return;
-    
+
     String jsonName = pdfName.replaceAll('.pdf', '.json');
     if (Platform.isWindows) {
       String baseDir = File(Platform.resolvedExecutable).parent.path;
@@ -4839,25 +5055,49 @@ class _HistoryScreenState extends State<HistoryScreen> {
           Map<String, dynamic> jsonBill = jsonDecode(contents);
           widget.onEditBill!(jsonBill, pdfName);
         } catch (e) {
-          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to read JSON bill: $e")));
+          if (mounted)
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Failed to read JSON bill: $e")),
+            );
         }
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cannot edit this bill. JSON data not found.")));
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Cannot edit this bill. JSON data not found."),
+            ),
+          );
       }
     } else {
       final pathUri = await LocalDatabase.getMyBillsFolderUri();
       if (pathUri != null) {
-        final childDocs = await saf.listFiles(pathUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+        final childDocs = await saf
+            .listFiles(
+              pathUri,
+              columns: [
+                saf.DocumentFileColumn.displayName,
+                saf.DocumentFileColumn.id,
+              ],
+            )
+            .toList();
         List<Uri> jsonBillFolders = [];
         for (var doc in childDocs) {
           if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
             jsonBillFolders.add(doc.uri);
           }
         }
-        
+
         saf.DocumentFile? targetJsonDoc;
         for (var folderUri in jsonBillFolders) {
-          final jsonDocs = await saf.listFiles(folderUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+          final jsonDocs = await saf
+              .listFiles(
+                folderUri,
+                columns: [
+                  saf.DocumentFileColumn.displayName,
+                  saf.DocumentFileColumn.id,
+                ],
+              )
+              .toList();
           for (var doc in jsonDocs) {
             if (doc.name == jsonName) {
               targetJsonDoc = doc;
@@ -4877,14 +5117,23 @@ class _HistoryScreenState extends State<HistoryScreen> {
               return;
             }
           } catch (e) {
-             if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to read JSON bill: $e")));
-             return;
+            if (mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("Failed to read JSON bill: $e")),
+              );
+            return;
           }
         }
       }
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cannot edit this bill. JSON data not found.")));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Cannot edit this bill. JSON data not found."),
+          ),
+        );
     }
   }
+
   final TextEditingController _historySearchController =
       TextEditingController();
 
@@ -5667,40 +5916,57 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     child: PopupMenuButton<String>(
                                       icon: Icon(
                                         Icons.more_vert,
-                                        color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
+                                        color: isDark
+                                            ? Colors.blueGrey[100]
+                                            : Colors.blueGrey,
                                       ),
                                       onSelected: (value) async {
                                         if (value == 'share') {
                                           try {
                                             if (file is File) {
-                                              Share.shareXFiles([XFile(file.path)], text: 'Invoice Sharing');
+                                              Share.shareXFiles([
+                                                XFile(file.path),
+                                              ], text: 'Invoice Sharing');
                                             } else {
-                                              final safFile = file as saf.DocumentFile;
-                                              final bytes = await saf.getDocumentContent(safFile.uri);
+                                              final safFile =
+                                                  file as saf.DocumentFile;
+                                              final bytes = await saf
+                                                  .getDocumentContent(
+                                                    safFile.uri,
+                                                  );
                                               if (bytes != null) {
-                                                final tempFile = File('${Directory.systemTemp.path}/${safFile.name}');
-                                                await tempFile.writeAsBytes(bytes);
-                                                Share.shareXFiles([XFile(tempFile.path)], text: 'Invoice Sharing');
+                                                final tempFile = File(
+                                                  '${Directory.systemTemp.path}/${safFile.name}',
+                                                );
+                                                await tempFile.writeAsBytes(
+                                                  bytes,
+                                                );
+                                                Share.shareXFiles([
+                                                  XFile(tempFile.path),
+                                                ], text: 'Invoice Sharing');
                                               }
                                             }
                                           } catch (e) {
-                                            debugPrint("Error sharing file: $e");
+                                            debugPrint(
+                                              "Error sharing file: $e",
+                                            );
                                           }
                                         } else if (value == 'edit') {
                                           _editBill(file);
                                         }
                                       },
-                                      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                                        const PopupMenuItem<String>(
-                                          value: 'share',
-                                          child: Text('SHARE'),
-                                        ),
-                                        if (widget.onEditBill != null)
-                                          const PopupMenuItem<String>(
-                                            value: 'edit',
-                                            child: Text('EDIT'),
-                                          ),
-                                      ],
+                                      itemBuilder: (BuildContext context) =>
+                                          <PopupMenuEntry<String>>[
+                                            const PopupMenuItem<String>(
+                                              value: 'share',
+                                              child: Text('SHARE'),
+                                            ),
+                                            if (widget.onEditBill != null)
+                                              const PopupMenuItem<String>(
+                                                value: 'edit',
+                                                child: Text('EDIT'),
+                                              ),
+                                          ],
                                     ),
                                   ),
                                 ),
@@ -7589,18 +7855,24 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     "DEC",
   ];
 
-  Widget _buildToggleBtn(String label, bool isSelected, {bool disabled = false}) {
+  Widget _buildToggleBtn(
+    String label,
+    bool isSelected, {
+    bool disabled = false,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     Color bgColor = isSelected
         ? (isDark ? Colors.blueGrey[200]! : Colors.blueGrey[800]!)
         : (isDark ? Colors.blueGrey[800]! : Colors.blueGrey[50]!);
     Color fgColor = isSelected
         ? (isDark ? Colors.black : Colors.white)
         : (isDark ? Colors.white : Colors.blueGrey[900]!);
-        
+
     if (disabled) {
-      bgColor = isSelected ? Colors.grey[400]! : (isDark ? Colors.blueGrey[900]! : Colors.grey[200]!);
+      bgColor = isSelected
+          ? Colors.grey[400]!
+          : (isDark ? Colors.blueGrey[900]! : Colors.grey[200]!);
       fgColor = isSelected ? Colors.grey[700]! : Colors.grey[500]!;
     }
 
@@ -7621,7 +7893,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
             ),
           ),
         ),
-        onPressed: disabled ? null : () => setState(() => _selectedType = label),
+        onPressed: disabled
+            ? null
+            : () => setState(() => _selectedType = label),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -8409,7 +8683,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     double currentAmt = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
     String currentDate = _dateCtrl.text.trim();
 
-    bool hasBillId = _editingTransaction != null && (_editingTransaction!['billId'] ?? '').toString().isNotEmpty;
+    bool hasBillId =
+        _editingTransaction != null &&
+        (_editingTransaction!['billId'] ?? '').toString().isNotEmpty;
 
     if (_isEditingOpening) {
       double origAmt =
@@ -8526,24 +8802,24 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       child: TextField(
                         enabled: !hasBillId,
                         controller: _dateCtrl,
-                      onChanged: (_) => setState(() {}),
-                      keyboardType: TextInputType.datetime,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
-                      ],
-                      decoration: const InputDecoration(
-                        hintText: "DATE",
-                        hintStyle: TextStyle(fontSize: 10),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 4,
-                          vertical: 0,
+                        onChanged: (_) => setState(() {}),
+                        keyboardType: TextInputType.datetime,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                        ],
+                        decoration: const InputDecoration(
+                          hintText: "DATE",
+                          hintStyle: TextStyle(fontSize: 10),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 0,
+                          ),
+                          border: OutlineInputBorder(),
                         ),
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Expanded(
                     flex: 30,
                     child: Column(
@@ -8600,7 +8876,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                           padding: EdgeInsets.zero,
                           backgroundColor: hasBillId
                               ? Colors.blueGrey
-                              : (canSave ? Colors.green : Colors.grey.withOpacity(0.5)),
+                              : (canSave
+                                    ? Colors.green
+                                    : Colors.grey.withOpacity(0.5)),
                           foregroundColor: hasBillId || canSave
                               ? Colors.white
                               : Colors.white70,
@@ -8617,91 +8895,96 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                   _isEditingOpening = false;
                                 });
                               }
-                            : (!canSave ? null : () async {
-                                setState(() {
-                                  if (_isEditingOpening) {
-                                    party['opening_balance'] =
-                                        double.tryParse(
-                                          _amountCtrl.text.trim(),
-                                        ) ??
-                                        0.0;
-                                    party['opening_date'] = _dateCtrl.text
-                                        .trim();
-                                    party['opening_type'] = _selectedType;
-                                  } else if (_editingTransaction != null) {
-                                    bool toDebit =
-                                        _selectedType == 'PAYMENT' ||
-                                        _selectedType == 'SALES';
-                                    _editingTransaction!['date'] = _dateCtrl
-                                        .text
-                                        .trim();
-                                    _editingTransaction!['debit'] = toDebit
-                                        ? (double.tryParse(
+                            : (!canSave
+                                  ? null
+                                  : () async {
+                                      setState(() {
+                                        if (_isEditingOpening) {
+                                          party['opening_balance'] =
+                                              double.tryParse(
                                                 _amountCtrl.text.trim(),
                                               ) ??
-                                              0.0)
-                                        : 0.0;
-                                    _editingTransaction!['credit'] = !toDebit
-                                        ? (double.tryParse(
-                                                _amountCtrl.text.trim(),
-                                              ) ??
-                                              0.0)
-                                        : 0.0;
-                                    _editingTransaction!['type'] =
-                                        _selectedType;
+                                              0.0;
+                                          party['opening_date'] = _dateCtrl.text
+                                              .trim();
+                                          party['opening_type'] = _selectedType;
+                                        } else if (_editingTransaction !=
+                                            null) {
+                                          bool toDebit =
+                                              _selectedType == 'PAYMENT' ||
+                                              _selectedType == 'SALES';
+                                          _editingTransaction!['date'] =
+                                              _dateCtrl.text.trim();
+                                          _editingTransaction!['debit'] =
+                                              toDebit
+                                              ? (double.tryParse(
+                                                      _amountCtrl.text.trim(),
+                                                    ) ??
+                                                    0.0)
+                                              : 0.0;
+                                          _editingTransaction!['credit'] =
+                                              !toDebit
+                                              ? (double.tryParse(
+                                                      _amountCtrl.text.trim(),
+                                                    ) ??
+                                                    0.0)
+                                              : 0.0;
+                                          _editingTransaction!['type'] =
+                                              _selectedType;
 
-                                    transactions.sort((a, b) {
-                                      DateTime dateA =
-                                          _parseDate(a['date'] ?? "") ??
-                                          DateTime(1970);
-                                      DateTime dateB =
-                                          _parseDate(b['date'] ?? "") ??
-                                          DateTime(1970);
-                                      return dateA.compareTo(dateB);
-                                    });
-                                  } else {
-                                    bool toDebit =
-                                        _selectedType == 'PAYMENT' ||
-                                        _selectedType == 'SALES';
-                                    transactions.add({
-                                      'date': _dateCtrl.text.trim(),
-                                      'debit': toDebit
-                                          ? (double.tryParse(
-                                                  _amountCtrl.text.trim(),
-                                                ) ??
-                                                0.0)
-                                          : 0.0,
-                                      'credit': !toDebit
-                                          ? (double.tryParse(
-                                                  _amountCtrl.text.trim(),
-                                                ) ??
-                                                0.0)
-                                          : 0.0,
-                                      'type': _selectedType,
-                                    });
-                                    transactions.sort((a, b) {
-                                      DateTime dateA =
-                                          _parseDate(a['date'] ?? "") ??
-                                          DateTime(1970);
-                                      DateTime dateB =
-                                          _parseDate(b['date'] ?? "") ??
-                                          DateTime(1970);
-                                      return dateA.compareTo(dateB);
-                                    });
-                                  }
-                                  _amountCtrl.clear();
-                                  _dateCtrl.clear();
-                                  _editingTransaction = null;
-                                  _isEditingOpening = false;
-                                });
-                                await LocalDatabase.savePartiesToDisk();
-                              }),
+                                          transactions.sort((a, b) {
+                                            DateTime dateA =
+                                                _parseDate(a['date'] ?? "") ??
+                                                DateTime(1970);
+                                            DateTime dateB =
+                                                _parseDate(b['date'] ?? "") ??
+                                                DateTime(1970);
+                                            return dateA.compareTo(dateB);
+                                          });
+                                        } else {
+                                          bool toDebit =
+                                              _selectedType == 'PAYMENT' ||
+                                              _selectedType == 'SALES';
+                                          transactions.add({
+                                            'date': _dateCtrl.text.trim(),
+                                            'debit': toDebit
+                                                ? (double.tryParse(
+                                                        _amountCtrl.text.trim(),
+                                                      ) ??
+                                                      0.0)
+                                                : 0.0,
+                                            'credit': !toDebit
+                                                ? (double.tryParse(
+                                                        _amountCtrl.text.trim(),
+                                                      ) ??
+                                                      0.0)
+                                                : 0.0,
+                                            'type': _selectedType,
+                                          });
+                                          transactions.sort((a, b) {
+                                            DateTime dateA =
+                                                _parseDate(a['date'] ?? "") ??
+                                                DateTime(1970);
+                                            DateTime dateB =
+                                                _parseDate(b['date'] ?? "") ??
+                                                DateTime(1970);
+                                            return dateA.compareTo(dateB);
+                                          });
+                                        }
+                                        _amountCtrl.clear();
+                                        _dateCtrl.clear();
+                                        _editingTransaction = null;
+                                        _isEditingOpening = false;
+                                      });
+                                      await LocalDatabase.savePartiesToDisk();
+                                    }),
                         child: Icon(
                           hasBillId
                               ? Icons.arrow_back
-                              : ((_editingTransaction != null || _isEditingOpening)
-                                  ? Icons.save
-                                  : Icons.add),
+                              : ((_editingTransaction != null ||
+                                        _isEditingOpening)
+                                    ? Icons.save
+                                    : Icons.add),
                           size: 20,
                         ),
                       ),
