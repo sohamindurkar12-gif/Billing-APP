@@ -995,15 +995,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: Colors.grey[500],
                                   foregroundColor: Colors.white,
                                 ),
-                                onPressed: () => Navigator.of(ctx).pop(true),
-                                child: const Text(
-                                  "YES",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    "CANCEL",
+                                    style: TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ),
@@ -1018,12 +1018,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   backgroundColor: Colors.red,
                                   foregroundColor: Colors.white,
                                 ),
-                                onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text(
-                                  "NO",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    "DELETE",
+                                    style: TextStyle(fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ),
@@ -2494,7 +2494,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     bool
                                     confirm = await _showConfirmationWarning(
                                       context,
-                                      "DO YOU REALLY WANT TO\nREMOVE THIS ITEM?",
+                                      "DO YOU REALLY WANT TO\nDELETE THIS ITEM?",
                                     );
                                     if (confirm) {
                                       setState(() => _cart.removeAt(index));
@@ -3297,7 +3297,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         if (_cart.isNotEmpty || _isEditingBill) {
                           bool confirm = await _showConfirmationWarning(
                             context,
-                            "Taking Back will clear all items currently in your cart and cancel editing. Do you want to proceed?",
+                            "Taking Back will clear all items\nin your cart and cancel editing.\nDo you want to proceed?",
                           );
                           if (!confirm) return;
                         }
@@ -6382,13 +6382,16 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             height: 45,
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
+                                backgroundColor: Colors.grey[500],
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text(
-                                "YES",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "CANCEL",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
@@ -6402,10 +6405,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text(
-                                "NO",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "DELETE",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
@@ -6701,13 +6707,16 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                             height: 45,
                             child: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
+                                backgroundColor: Colors.grey[500],
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text(
-                                "YES",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "CANCEL",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
@@ -6721,10 +6730,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text(
-                                "NO",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "DELETE",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
@@ -7183,8 +7195,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                       msg,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        fontSize: 14,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
                       ),
                     ),
                     const SizedBox(height: 25),
@@ -7199,9 +7212,12 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                 foregroundColor: Colors.white,
                               ),
                               onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text(
-                                "CANCEL",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "CANCEL",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
@@ -7216,9 +7232,12 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                 foregroundColor: Colors.white,
                               ),
                               onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text(
-                                "DELETE",
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                              child: const FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  "DELETE",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                               ),
                             ),
                           ),
@@ -7782,7 +7801,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                       ),
                                       onPressed: () async {
                                         bool confirm = await _showWarning(
-                                          "Are you sure you want to delete '$pName'? This action cannot be undone.",
+                                          "ARE YOU SURE YOU WANT TO\nDELETE '${pName.toUpperCase()}'?",
                                         );
                                         if (confirm) {
                                           setState(() {
@@ -7947,8 +7966,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                 children: [
                   const Icon(
                     Icons.warning_amber_rounded,
-                    color: Colors.amber,
-                    size: 40,
+                    color: Colors.orange,
+                    size: 48,
                   ),
                   const SizedBox(height: 10),
                   const Text(
@@ -8314,26 +8333,38 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                 children: [
                   const Icon(
                     Icons.warning_amber_rounded,
-                    color: Colors.amber,
-                    size: 40,
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    "WARNING",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.red,
-                    ),
+                    color: Colors.orange,
+                    size: 48,
                   ),
                   const SizedBox(height: 15),
                   const Text(
-                    "Are you sure you want to delete this transaction?",
+                    "ARE YOU SURE YOU WANT TO\nDELETE THIS TRANSACTION?",
                     textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueGrey,
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 25),
                   Row(
                     children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                          ),
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            "CANCEL",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
@@ -8348,23 +8379,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                             Navigator.pop(context);
                           },
                           child: const Text(
-                            "YES, DELETE",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey,
-                          ),
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            "CANCEL",
+                            "DELETE",
                             style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
