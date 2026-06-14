@@ -816,6 +816,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TextEditingController _partySearchController = TextEditingController();
   String _partyTransactionType = "SALES";
 
+  bool _isEditingBill = false;
+  String? _editingBillId;
+  String? _editingOriginalPdfName;
+  String? _editingBillDate;
+  String? _editingBillTime;
+  String? _editingCustomerName;
+  bool _editingBillAddToLedger = true;
+
   // Keyboard shortcut state (Windows only)
   String _keyBuffer = "";
   bool _isEditComboMode = false;
@@ -1154,35 +1162,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
+    String currentBillId;
+    if (_isEditingBill && _editingBillId != null) {
+      currentBillId = _editingBillId!;
+    } else {
+      currentBillId = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+
     if (addToLedger && _isPartySelected && _selectedParty != null) {
       if (_selectedParty!['transactions'] == null) {
         _selectedParty!['transactions'] = <Map<String, dynamic>>[];
       }
-
-      Map<String, dynamic> newTx = {
-        'date': dateString,
-        'type': _partyTransactionType,
-        'debit': _partyTransactionType == "SALES" ? grandTotal : 0.0,
-        'credit': _partyTransactionType == "PURCHASE" ? grandTotal : 0.0,
-      };
-      _selectedParty!['transactions'].add(newTx);
+      
+      if (_isEditingBill) {
+        int txIndex = _selectedParty!['transactions'].indexWhere((tx) => tx['billId'] == currentBillId);
+        if (txIndex != -1) {
+          _selectedParty!['transactions'][txIndex]['date'] = dateString;
+          _selectedParty!['transactions'][txIndex]['type'] = _partyTransactionType;
+          _selectedParty!['transactions'][txIndex]['debit'] = _partyTransactionType == "SALES" ? grandTotal : 0.0;
+          _selectedParty!['transactions'][txIndex]['credit'] = _partyTransactionType == "PURCHASE" ? grandTotal : 0.0;
+        } else {
+          _selectedParty!['transactions'].add({
+            'billId': currentBillId,
+            'date': dateString,
+            'type': _partyTransactionType,
+            'debit': _partyTransactionType == "SALES" ? grandTotal : 0.0,
+            'credit': _partyTransactionType == "PURCHASE" ? grandTotal : 0.0,
+          });
+        }
+      } else {
+        Map<String, dynamic> newTx = {
+          'billId': currentBillId,
+          'date': dateString,
+          'type': _partyTransactionType,
+          'debit': _partyTransactionType == "SALES" ? grandTotal : 0.0,
+          'credit': _partyTransactionType == "PURCHASE" ? grandTotal : 0.0,
+        };
+        _selectedParty!['transactions'].add(newTx);
+      }
       await LocalDatabase.savePartiesToDisk();
     }
+
+    Map<String, dynamic> jsonBill = {
+      'billId': currentBillId,
+      'customerName': customerName,
+      'date': dateString,
+      'partyTransactionType': _partyTransactionType,
+      'addToLedger': addToLedger,
+      'cart': _cart,
+    };
+    String jsonString = jsonEncode(jsonBill);
 
     if (Platform.isWindows) {
       String baseDir = File(Platform.resolvedExecutable).parent.path;
       String dir = "$baseDir\\Billing APP\\MYBILLS";
+      String jsonDir = "$dir\\JSON Bills";
       Directory(dir).createSync(recursive: true);
+      Directory(jsonDir).createSync(recursive: true);
+      
+      if (_isEditingBill && _editingOriginalPdfName != null) {
+        String oldPdfPath = "$dir\\$_editingOriginalPdfName";
+        String oldJsonPath = "$jsonDir\\${_editingOriginalPdfName!.replaceAll('.pdf', '.json')}";
+        if (File(oldPdfPath).existsSync()) File(oldPdfPath).deleteSync();
+        if (File(oldJsonPath).existsSync()) File(oldJsonPath).deleteSync();
+      }
+      
       File file = File("$dir\\$finalFileName.pdf");
       await file.writeAsBytes(await pdf.save());
+      
+      File jFile = File("$jsonDir\\$finalFileName.json");
+      await jFile.writeAsString(jsonString);
+      
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf")));
         setState(() {
           _cart = [];
           _isPartySelected = false;
           _partyTransactionType = "SALES";
+          _isEditingBill = false;
+          _editingBillId = null;
+          _editingOriginalPdfName = null;
+          _editingBillDate = null;
+          _editingBillTime = null;
+          _editingCustomerName = null;
         });
       }
       return;
@@ -1190,20 +1252,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final pathUri = await LocalDatabase.getMyBillsFolderUri();
     if (pathUri != null) {
+      if (_isEditingBill && _editingOriginalPdfName != null) {
+        final docs = await saf.listFiles(pathUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+        for (var doc in docs) {
+          if (doc.name == _editingOriginalPdfName) {
+            await saf.delete(doc.uri);
+          }
+        }
+      }
+
       await saf.createFileAsBytes(
         pathUri,
         mimeType: 'application/pdf',
         displayName: "$finalFileName.pdf",
         bytes: await pdf.save(),
       );
+      
+      Uri? jsonBillsUri;
+      final childDocs = await saf.listFiles(pathUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+      for (var doc in childDocs) {
+        if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+          jsonBillsUri = doc.uri;
+          break;
+        }
+      }
+      if (jsonBillsUri == null) {
+        final newDir = await saf.createDirectory(pathUri, "JSON Bills");
+        jsonBillsUri = newDir?.uri;
+      }
+      
+      if (jsonBillsUri != null) {
+        if (_isEditingBill && _editingOriginalPdfName != null) {
+          final oldJsonName = _editingOriginalPdfName!.replaceAll('.pdf', '.json');
+          final jsonDocs = await saf.listFiles(jsonBillsUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+          for (var doc in jsonDocs) {
+            if (doc.name == oldJsonName) {
+              await saf.delete(doc.uri);
+            }
+          }
+        }
+        
+        await saf.createFileAsString(
+          jsonBillsUri,
+          mimeType: 'application/json',
+          displayName: "$finalFileName.json",
+          content: jsonString,
+        );
+      }
+
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Saved as $finalFileName.pdf")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf")));
         setState(() {
           _cart = [];
           _isPartySelected = false;
           _partyTransactionType = "SALES";
+          _isEditingBill = false;
+          _editingBillId = null;
+          _editingOriginalPdfName = null;
+          _editingBillDate = null;
+          _editingBillTime = null;
+          _editingCustomerName = null;
         });
       }
     }
@@ -1212,14 +1320,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showCustomerNamePopup() {
     final TextEditingController nameController = TextEditingController();
     final TextEditingController dateController = TextEditingController(
-      text: DateFormat('dd-MM-yyyy').format(DateTime.now()),
+      text: _isEditingBill && _editingBillDate != null ? _editingBillDate : DateFormat('dd-MM-yyyy').format(DateTime.now()),
     );
     final TextEditingController timeController = TextEditingController(
-      text: DateFormat('HH:mm:ss').format(DateTime.now()),
+      text: _isEditingBill && _editingBillTime != null ? _editingBillTime : DateFormat('HH:mm:ss').format(DateTime.now()),
     );
 
     bool isNameTyped = false;
-    bool addToLedger = true;
+    bool addToLedger = _isEditingBill ? _editingBillAddToLedger : true;
     DateTime? openingDate;
 
     if (_isPartySelected && _selectedParty != null) {
@@ -1236,6 +1344,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
         } catch (_) {}
       }
+    } else if (_isEditingBill && _editingCustomerName != null && _editingCustomerName != "NO PARTY") {
+      nameController.text = _editingCustomerName!;
+      if (_editingCustomerName!.isNotEmpty) isNameTyped = true;
     }
     bool isDateValid = true;
     bool isTimeValid = true;
@@ -1402,6 +1513,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             globalShowRateSetting,
                             dateController.text.trim(),
                             timeController.text.trim(),
+                            addToLedger,
                           );
                         },
                         inputFormatters: [
@@ -1470,7 +1582,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       if (_isPartySelected && _selectedParty != null) ...[
                         const SizedBox(height: 12),
                         InkWell(
-                          onTap: () {
+                          onTap: _isEditingBill ? null : () {
                             setPopupState(() {
                               addToLedger = !addToLedger;
                               if (addToLedger) {
@@ -1521,7 +1633,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       : Colors.blueGrey[800],
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
-                                  onChanged: (val) {
+                                  onChanged: _isEditingBill ? null : (val) {
                                     setPopupState(() {
                                       addToLedger = val ?? true;
                                       if (addToLedger) {
@@ -1640,6 +1752,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           globalShowRateSetting,
                                           dateController.text.trim(),
                                           timeController.text.trim(),
+                                          addToLedger,
                                         );
                                       },
                                 child: const Text(
@@ -1701,11 +1814,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isFirstTapQty = true;
     bool isFirstTapRate = true;
 
-    String baseName = item['name'] ?? "";
-    String regName = item['regional_name'] ?? "";
-    String completeDisplayName = regName.isNotEmpty
-        ? "$baseName ($regName)"
-        : baseName;
+    String baseName = (item['name'] ?? "").replaceAll(RegExp(r'[\r\n]'), ' ').trim();
+    String completeDisplayName = baseName;
 
     final FocusNode numpadFocusNode = FocusNode();
 
@@ -2324,7 +2434,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       foregroundColor: Colors.white,
                     ),
                     child: Text(
-                      "GENERATE BILL (₹${cartTotal.toStringAsFixed(2)})",
+                      "${_isEditingBill ? 'UPDATE BILL' : 'GENERATE BILL'} (₹${cartTotal.toStringAsFixed(2)})",
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -3000,26 +3110,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: EdgeInsets.zero,
-                        backgroundColor:
-                            Theme.of(context).brightness == Brightness.dark
+                        backgroundColor: _isEditingBill ? Colors.grey[300] : (Theme.of(context).brightness == Brightness.dark
                             ? Colors.blueGrey[800]
-                            : Colors.blueGrey[50],
-                        foregroundColor:
-                            Theme.of(context).brightness == Brightness.dark
+                            : Colors.blueGrey[50]),
+                        foregroundColor: _isEditingBill ? Colors.grey[500] : (Theme.of(context).brightness == Brightness.dark
                             ? Colors.white
-                            : Colors.blueGrey[900],
+                            : Colors.blueGrey[900]),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                           side: BorderSide(
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
+                            color: _isEditingBill ? Colors.transparent : (Theme.of(context).brightness == Brightness.dark
                                 ? Colors.blueGrey[700]!
-                                : Colors.blueGrey.shade200,
+                                : Colors.blueGrey.shade200),
                           ),
                         ),
                       ),
-                      onPressed: () {
+                      onPressed: _isEditingBill ? null : () {
                         setState(() {
                           _isPartySelected = false;
                         });
@@ -3076,10 +3183,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                       onPressed: () async {
-                        if (_cart.isNotEmpty) {
+                        if (_cart.isNotEmpty || _isEditingBill) {
                           bool confirm = await _showConfirmationWarning(
                             context,
-                            "Taking Back will clear all items currently in your cart. Do you want to proceed?",
+                            "Taking Back will clear all items currently in your cart and cancel editing. Do you want to proceed?",
                           );
                           if (!confirm) return;
                         }
@@ -3087,6 +3194,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _cart.clear();
                           _isPartySelected = false;
                           _partyTransactionType = "SALES";
+                          _isEditingBill = false;
+                          _editingBillId = null;
+                          _editingOriginalPdfName = null;
                         });
                       },
                       child: const Row(
@@ -3311,7 +3421,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const WarehouseScreen(),
+                  builder: (context) => WarehouseScreen(
+                    onEditBill: (jsonBill, originalPdfName) {
+                      Navigator.of(context).popUntil((route) => route.isFirst);
+                      _loadBillForEditing(jsonBill, originalPdfName);
+                    },
+                  ),
                 ),
               ).then((_) => setState(() {})),
             ),
@@ -3336,6 +3451,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
             : _buildMobileAppView(true, totalBill),
       ),
     );
+  }
+
+  void _loadBillForEditing(Map<String, dynamic> jsonBill, String originalPdfName) {
+    setState(() {
+      _cart = List<Map<String, dynamic>>.from(jsonBill['cart'] ?? []);
+      _isPartySelected = true;
+      _selectedParty = null;
+      _editingCustomerName = jsonBill['customerName'];
+      if (_editingCustomerName != null && _editingCustomerName != "NO PARTY") {
+        for (var p in globalParties) {
+          if (p['name'] == _editingCustomerName) {
+            _selectedParty = p;
+            break;
+          }
+        }
+      }
+      _isEditingBill = true;
+      _editingBillId = jsonBill['billId'];
+      _editingOriginalPdfName = originalPdfName;
+      _editingBillDate = jsonBill['date'];
+      _editingBillTime = jsonBill['time'];
+      _partyTransactionType = jsonBill['partyTransactionType'] ?? "SALES";
+      _editingBillAddToLedger = jsonBill['addToLedger'] ?? true;
+    });
   }
 }
 
@@ -3717,10 +3856,12 @@ class _SetupScreenState extends State<SetupScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    Row(
+                    Column(
                       children: [
                         Checkbox(
                           value: exportInventory,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: const VisualDensity(horizontal: 0, vertical: -4),
                           onChanged: (val) {
                             setDialogState(
                               () => exportInventory = val ?? false,
@@ -3730,10 +3871,12 @@ class _SetupScreenState extends State<SetupScreen> {
                         const Text("INVENTORY", style: TextStyle(fontSize: 12)),
                       ],
                     ),
-                    Row(
+                    Column(
                       children: [
                         Checkbox(
                           value: exportSettings,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: const VisualDensity(horizontal: 0, vertical: -4),
                           onChanged: (val) {
                             setDialogState(() => exportSettings = val ?? false);
                           },
@@ -3746,6 +3889,8 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 8),
+                const Divider(color: Colors.grey, thickness: 0.5),
                 const SizedBox(height: 12),
                 // --- ROW 1: EXPORT SYSTEM (80% / 20%) ---
                 Row(
@@ -4545,7 +4690,9 @@ class _SetupScreenState extends State<SetupScreen> {
 
 // --- WAREHOUSE SCREEN ---
 class WarehouseScreen extends StatelessWidget {
-  const WarehouseScreen({super.key});
+  final Function(Map<String, dynamic> jsonBill, String originalPdfName)? onEditBill;
+
+  const WarehouseScreen({super.key, this.onEditBill});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -4620,7 +4767,9 @@ class WarehouseScreen extends StatelessWidget {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const HistoryScreen(),
+                    builder: (context) => HistoryScreen(
+                      onEditBill: onEditBill,
+                    ),
                   ),
                 ),
                 icon: const Icon(Icons.picture_as_pdf),
@@ -4661,7 +4810,9 @@ class WarehouseScreen extends StatelessWidget {
 
 // --- HISTORY SCREEN ---
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  final Function(Map<String, dynamic> jsonBill, String originalPdfName)? onEditBill;
+
+  const HistoryScreen({super.key, this.onEditBill});
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
@@ -4669,6 +4820,71 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   List<dynamic> _allPdfFiles = [];
   List<dynamic> _filteredPdfFiles = [];
+
+  Future<void> _editBill(dynamic file) async {
+    if (widget.onEditBill == null) return;
+    String pdfName = file is File
+        ? file.path.split(Platform.pathSeparator).last
+        : (file as saf.DocumentFile).name ?? "";
+    if (pdfName.isEmpty) return;
+    
+    String jsonName = pdfName.replaceAll('.pdf', '.json');
+    if (Platform.isWindows) {
+      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\JSON Bills\\$jsonName";
+      File jsonFile = File(jsonPath);
+      if (await jsonFile.exists()) {
+        try {
+          String contents = await jsonFile.readAsString();
+          Map<String, dynamic> jsonBill = jsonDecode(contents);
+          widget.onEditBill!(jsonBill, pdfName);
+        } catch (e) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to read JSON bill: $e")));
+        }
+      } else {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cannot edit this bill. JSON data not found.")));
+      }
+    } else {
+      final pathUri = await LocalDatabase.getMyBillsFolderUri();
+      if (pathUri != null) {
+        final childDocs = await saf.listFiles(pathUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+        List<Uri> jsonBillFolders = [];
+        for (var doc in childDocs) {
+          if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+            jsonBillFolders.add(doc.uri);
+          }
+        }
+        
+        saf.DocumentFile? targetJsonDoc;
+        for (var folderUri in jsonBillFolders) {
+          final jsonDocs = await saf.listFiles(folderUri, columns: [saf.DocumentFileColumn.displayName, saf.DocumentFileColumn.id]).toList();
+          for (var doc in jsonDocs) {
+            if (doc.name == jsonName) {
+              targetJsonDoc = doc;
+              break;
+            }
+          }
+          if (targetJsonDoc != null) break;
+        }
+
+        if (targetJsonDoc != null) {
+          try {
+            final bytes = await saf.getDocumentContent(targetJsonDoc.uri);
+            if (bytes != null) {
+              final contents = utf8.decode(bytes);
+              Map<String, dynamic> jsonBill = jsonDecode(contents);
+              widget.onEditBill!(jsonBill, pdfName);
+              return;
+            }
+          } catch (e) {
+             if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Failed to read JSON bill: $e")));
+             return;
+          }
+        }
+      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Cannot edit this bill. JSON data not found.")));
+    }
+  }
   final TextEditingController _historySearchController =
       TextEditingController();
 
@@ -5448,61 +5664,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           : Colors.blueGrey[100],
                                       borderRadius: BorderRadius.circular(16),
                                     ),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(16),
-                                      onTap: () async {
-                                        try {
-                                          if (file is File) {
-                                            Share.shareXFiles([
-                                              XFile(file.path),
-                                            ], text: 'Invoice Sharing');
-                                          } else {
-                                            final safFile =
-                                                file as saf.DocumentFile;
-                                            final bytes = await saf
-                                                .getDocumentContent(
-                                                  safFile.uri,
-                                                );
-                                            if (bytes != null) {
-                                              final tempFile = File(
-                                                '${Directory.systemTemp.path}/${safFile.name}',
-                                              );
-                                              await tempFile.writeAsBytes(
-                                                bytes,
-                                              );
-                                              Share.shareXFiles([
-                                                XFile(tempFile.path),
-                                              ], text: 'Invoice Sharing');
+                                    child: PopupMenuButton<String>(
+                                      icon: Icon(
+                                        Icons.more_vert,
+                                        color: isDark ? Colors.blueGrey[100] : Colors.blueGrey,
+                                      ),
+                                      onSelected: (value) async {
+                                        if (value == 'share') {
+                                          try {
+                                            if (file is File) {
+                                              Share.shareXFiles([XFile(file.path)], text: 'Invoice Sharing');
+                                            } else {
+                                              final safFile = file as saf.DocumentFile;
+                                              final bytes = await saf.getDocumentContent(safFile.uri);
+                                              if (bytes != null) {
+                                                final tempFile = File('${Directory.systemTemp.path}/${safFile.name}');
+                                                await tempFile.writeAsBytes(bytes);
+                                                Share.shareXFiles([XFile(tempFile.path)], text: 'Invoice Sharing');
+                                              }
                                             }
+                                          } catch (e) {
+                                            debugPrint("Error sharing file: $e");
                                           }
-                                        } catch (e) {
-                                          debugPrint("Error sharing file: $e");
+                                        } else if (value == 'edit') {
+                                          _editBill(file);
                                         }
                                       },
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.share,
-                                            color: isDark
-                                                ? Colors.blueGrey[100]
-                                                : Colors.blueGrey,
-                                            size: 20,
+                                      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                                        const PopupMenuItem<String>(
+                                          value: 'share',
+                                          child: Text('SHARE'),
+                                        ),
+                                        if (widget.onEditBill != null)
+                                          const PopupMenuItem<String>(
+                                            value: 'edit',
+                                            child: Text('EDIT'),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            "SHARE",
-                                            style: TextStyle(
-                                              fontSize: 8.5,
-                                              fontWeight: FontWeight.bold,
-                                              color: isDark
-                                                  ? Colors.blueGrey[100]
-                                                  : Colors.blueGrey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                      ],
                                     ),
                                   ),
                                 ),
@@ -7391,30 +7589,39 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     "DEC",
   ];
 
-  Widget _buildToggleBtn(String label, bool isSelected) {
+  Widget _buildToggleBtn(String label, bool isSelected, {bool disabled = false}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    Color bgColor = isSelected
+        ? (isDark ? Colors.blueGrey[200]! : Colors.blueGrey[800]!)
+        : (isDark ? Colors.blueGrey[800]! : Colors.blueGrey[50]!);
+    Color fgColor = isSelected
+        ? (isDark ? Colors.black : Colors.white)
+        : (isDark ? Colors.white : Colors.blueGrey[900]!);
+        
+    if (disabled) {
+      bgColor = isSelected ? Colors.grey[400]! : (isDark ? Colors.blueGrey[900]! : Colors.grey[200]!);
+      fgColor = isSelected ? Colors.grey[700]! : Colors.grey[500]!;
+    }
+
     return SizedBox(
       height: 21,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           padding: EdgeInsets.zero,
-          backgroundColor: isSelected
-              ? (isDark ? Colors.blueGrey[200] : Colors.blueGrey[800])
-              : (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50]),
-          foregroundColor: isSelected
-              ? (isDark ? Colors.black : Colors.white)
-              : (isDark ? Colors.white : Colors.blueGrey[900]),
-          elevation: isSelected ? 2 : 0,
+          backgroundColor: bgColor,
+          foregroundColor: fgColor,
+          elevation: isSelected && !disabled ? 2 : 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
             side: BorderSide(
-              color: isSelected
+              color: isSelected || disabled
                   ? Colors.transparent
                   : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200),
             ),
           ),
         ),
-        onPressed: () => setState(() => _selectedType = label),
+        onPressed: disabled ? null : () => setState(() => _selectedType = label),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -8202,6 +8409,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     double currentAmt = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
     String currentDate = _dateCtrl.text.trim();
 
+    bool hasBillId = _editingTransaction != null && (_editingTransaction!['billId'] ?? '').toString().isNotEmpty;
+
     if (_isEditingOpening) {
       double origAmt =
           double.tryParse(party['opening_balance']?.toString() ?? "0.0") ?? 0.0;
@@ -8286,6 +8495,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                     child: SizedBox(
                       height: 45,
                       child: TextField(
+                        enabled: !hasBillId,
                         controller: _amountCtrl,
                         onChanged: (_) => setState(() {}),
                         keyboardType: const TextInputType.numberWithOptions(
@@ -8311,8 +8521,11 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     flex: 30,
-                    child: TextField(
-                      controller: _dateCtrl,
+                    child: SizedBox(
+                      height: 45,
+                      child: TextField(
+                        enabled: !hasBillId,
+                        controller: _dateCtrl,
                       onChanged: (_) => setState(() {}),
                       keyboardType: TextInputType.datetime,
                       inputFormatters: [
@@ -8329,7 +8542,8 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 4),
+                ),
+                const SizedBox(width: 4),
                   Expanded(
                     flex: 30,
                     child: Column(
@@ -8340,6 +8554,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                               child: _buildToggleBtn(
                                 "PAYMENT",
                                 _selectedType == 'PAYMENT',
+                                disabled: hasBillId,
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -8347,6 +8562,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                               child: _buildToggleBtn(
                                 "RECEIPT",
                                 _selectedType == 'RECEIPT',
+                                disabled: hasBillId,
                               ),
                             ),
                           ],
@@ -8358,6 +8574,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                               child: _buildToggleBtn(
                                 "PURCHASE",
                                 _selectedType == 'PURCHASE',
+                                disabled: hasBillId,
                               ),
                             ),
                             const SizedBox(width: 4),
@@ -8365,6 +8582,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                               child: _buildToggleBtn(
                                 "SALES",
                                 _selectedType == 'SALES',
+                                disabled: hasBillId,
                               ),
                             ),
                           ],
@@ -8380,19 +8598,26 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           padding: EdgeInsets.zero,
-                          backgroundColor: canSave
-                              ? Colors.green
-                              : Colors.grey.withOpacity(0.5),
-                          foregroundColor: canSave
+                          backgroundColor: hasBillId
+                              ? Colors.blueGrey
+                              : (canSave ? Colors.green : Colors.grey.withOpacity(0.5)),
+                          foregroundColor: hasBillId || canSave
                               ? Colors.white
                               : Colors.white70,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        onPressed: !canSave
-                            ? null
-                            : () async {
+                        onPressed: hasBillId
+                            ? () {
+                                setState(() {
+                                  _amountCtrl.clear();
+                                  _dateCtrl.clear();
+                                  _editingTransaction = null;
+                                  _isEditingOpening = false;
+                                });
+                              }
+                            : (!canSave ? null : () async {
                                 setState(() {
                                   if (_isEditingOpening) {
                                     party['opening_balance'] =
@@ -8470,11 +8695,13 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                   _isEditingOpening = false;
                                 });
                                 await LocalDatabase.savePartiesToDisk();
-                              },
+                              }),
                         child: Icon(
-                          (_editingTransaction != null || _isEditingOpening)
-                              ? Icons.save
-                              : Icons.add,
+                          hasBillId
+                              ? Icons.arrow_back
+                              : ((_editingTransaction != null || _isEditingOpening)
+                                  ? Icons.save
+                                  : Icons.add),
                           size: 20,
                         ),
                       ),
@@ -8483,6 +8710,20 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                 ],
               ),
             ),
+            if (hasBillId) ...[
+              const SizedBox(height: 5),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(
+                  "This entry was auto-generated by a bill and cannot be manually edited here.",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 15),
             Container(
               padding: const EdgeInsets.symmetric(
