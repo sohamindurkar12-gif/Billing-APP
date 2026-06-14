@@ -1003,7 +1003,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   fit: BoxFit.scaleDown,
                                   child: Text(
                                     "CANCEL",
-                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1023,7 +1025,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   fit: BoxFit.scaleDown,
                                   child: Text(
                                     "DELETE",
-                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
