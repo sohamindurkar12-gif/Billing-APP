@@ -173,6 +173,7 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
 
 // --- GLOBAL DATA ---
 Map<String, List<Map<String, String>>> globalInventory = {};
+Map<String, Map<String, double>> globalStock = {};
 List<Map<String, dynamic>> globalParties = [];
 Map<String, String> globalCategoryColors = {};
 String currentLayoutSetting = "HL";
@@ -635,6 +636,73 @@ class LocalDatabase {
     }
     return folder.uri;
   }
+
+  static Future<void> saveStockToDisk() async {
+    try {
+      final content = jsonEncode(globalStock);
+      if (Platform.isWindows) {
+        String dir = _getWindowsSettingsDir();
+        if (!Directory(dir).existsSync()) {
+          Directory(dir).createSync(recursive: true);
+        }
+        await File("$dir\\stock.json").writeAsString(content);
+      } else {
+        final settingsUri = await getSettingsFolderUri();
+        if (settingsUri == null) return;
+        var file = await saf.child(settingsUri, 'stock.json');
+        if (file == null) {
+          await saf.createFileAsString(
+            settingsUri,
+            mimeType: "application/json",
+            displayName: "stock.json",
+            content: content,
+          );
+        } else {
+          await saf.writeToFileAsString(
+            file.uri,
+            content: content,
+            mode: FileMode.write,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Error saving stock: $e");
+    }
+  }
+
+  static Future<void> loadStockFromDisk() async {
+    try {
+      String? content;
+      if (Platform.isWindows) {
+        String fileStr = "${_getWindowsSettingsDir()}\\stock.json";
+        if (File(fileStr).existsSync()) {
+          content = await File(fileStr).readAsString();
+        }
+      } else {
+        final settingsUri = await getSettingsFolderUri();
+        if (settingsUri == null) return;
+        var file = await saf.child(settingsUri, 'stock.json');
+        if (file != null) {
+          final bytes = await saf.getDocumentContent(file.uri);
+          if (bytes != null) content = utf8.decode(bytes);
+        }
+      }
+
+      if (content != null) {
+        Map<String, dynamic> decoded = jsonDecode(content);
+        globalStock = {};
+        decoded.forEach((catKey, catValue) {
+          Map<String, double> catStock = {};
+          (catValue as Map<String, dynamic>).forEach((itemKey, itemValue) {
+            catStock[itemKey] = (itemValue as num).toDouble();
+          });
+          globalStock[catKey] = catStock;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading stock: $e");
+    }
+  }
 }
 
 // --- CLOUD DATABASE HELPER (PER-USER FIRESTORE SYNC) ---
@@ -924,6 +992,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     await LocalDatabase.loadFromDisk();
     await LocalDatabase.loadPartiesFromDisk();
+    await LocalDatabase.loadStockFromDisk();
     await LocalDatabase.loadAppSettings();
 
     try {
@@ -4964,6 +5033,29 @@ class WarehouseScreen extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
+                  MaterialPageRoute(builder: (context) => const StockCategoryScreen()),
+                ),
+                icon: const Icon(Icons.store),
+                label: const Text("STOCK"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                      ? Colors.blueGrey[800]
+                      : Colors.blueGrey[50],
+                  foregroundColor:
+                      Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white
+                      : Colors.blueGrey[900],
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            SizedBox(
+              width: double.infinity,
+              height: 60,
+              child: ElevatedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
                   MaterialPageRoute(builder: (context) => const LedgerScreen()),
                 ),
                 icon: const Icon(Icons.account_balance_wallet),
@@ -5027,7 +5119,280 @@ class WarehouseScreen extends StatelessWidget {
   }
 }
 
+
+// --- STOCK SCREENS ---
+class StockCategoryScreen extends StatefulWidget {
+  const StockCategoryScreen({super.key});
+
+  @override
+  State<StockCategoryScreen> createState() => _StockCategoryScreenState();
+}
+
+class _StockCategoryScreenState extends State<StockCategoryScreen> {
+  @override
+  Widget build(BuildContext context) {
+    List<String> categories = globalInventory.keys.toList();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.blueGrey[800],
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "STOCK",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              enabled: false,
+              decoration: InputDecoration(
+                hintText: "Search categories...",
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                filled: true,
+                fillColor: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+              ),
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                Expanded(
+                  flex: 10,
+                  child: Text("SR NO.",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                          fontSize: 12)),
+                ),
+                Expanded(
+                  flex: 60,
+                  child: Text("CATEGORY NAME",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                          fontSize: 12)),
+                ),
+                Expanded(
+                  flex: 30,
+                  child: Text("STOCK OF",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                          fontSize: 12)),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: categories.length,
+                itemBuilder: (context, i) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => StockItemsScreen(
+                              categoryName: categories[i],
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 10,
+                              child: Text(
+                                "${i + 1}",
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 60,
+                              child: Text(
+                                categories[i],
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const Expanded(
+                              flex: 30,
+                              child: Text(
+                                "", // Empty for now
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class StockItemsScreen extends StatefulWidget {
+  final String categoryName;
+  const StockItemsScreen({super.key, required this.categoryName});
+
+  @override
+  State<StockItemsScreen> createState() => _StockItemsScreenState();
+}
+
+class _StockItemsScreenState extends State<StockItemsScreen> {
+  @override
+  Widget build(BuildContext context) {
+    var items = globalInventory[widget.categoryName] ?? [];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.blueGrey[800],
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          "${widget.categoryName}'s STOCK",
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  flex: 10,
+                  child: Text("SR NO.",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                          fontSize: 12)),
+                ),
+                Expanded(
+                  flex: 40,
+                  child: Text("ITEM NAME",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                          fontSize: 12)),
+                ),
+                Expanded(
+                  flex: 30,
+                  child: Text("STOCK LEFT",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                          fontSize: 12)),
+                ),
+                Expanded(
+                  flex: 20,
+                  child: Text("STOCK OF",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                          fontSize: 12)),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: ListView.builder(
+                itemCount: items.length,
+                itemBuilder: (context, i) {
+                  var item = items[i];
+                  String baseName = item['name'] ?? "";
+                  String regName = item['regional_name'] ?? "";
+                  String formattedDisplayName = regName.isNotEmpty
+                      ? "$baseName ($regName)"
+                      : baseName;
+                      
+                  double stockLeft = 0.0;
+                  if (globalStock.containsKey(widget.categoryName) &&
+                      globalStock[widget.categoryName]!.containsKey(baseName)) {
+                    stockLeft = globalStock[widget.categoryName]![baseName]!;
+                  }
+                  
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 10,
+                            child: Text(
+                              "${i + 1}",
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 40,
+                            child: Text(
+                              formattedDisplayName,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 30,
+                            child: Text(
+                              "${stockLeft.toStringAsFixed(2)} ${item['unit']}",
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const Expanded(
+                            flex: 20,
+                            child: Text(
+                              "", // Empty for now
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // --- HISTORY SCREEN ---
+
 class HistoryScreen extends StatefulWidget {
   final Function(Map<String, dynamic> jsonBill, String originalPdfName)?
   onEditBill;
@@ -5989,7 +6354,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
+
 // --- HISTORY SCREEN ---
+
 class LedgerHistoryScreen extends StatefulWidget {
   const LedgerHistoryScreen({super.key});
   @override
@@ -6774,6 +7141,233 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     await LocalDatabase.saveToDisk();
   }
 
+  Future<void> _showStockPopup(
+    Map<String, String> data,
+    List<Map<String, String>> items,
+  ) async {
+    String unit = data['unit']!;
+    String selectedSubUnit = unit;
+    if (unit == "Kg")
+      selectedSubUnit = "Kg";
+    else if (unit == "Ltr")
+      selectedSubUnit = "Ltr";
+    else
+      selectedSubUnit = unit;
+
+    TextEditingController stockController = TextEditingController();
+    bool canSave = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setPopupState) {
+            void updateSaveButton() {
+              setPopupState(() {
+                canSave = stockController.text.trim().isNotEmpty;
+              });
+            }
+
+            Widget buildUnitBtn(String label) {
+              bool isSelected = selectedSubUnit == label;
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isSelected
+                          ? (isDark
+                                ? Colors.blueGrey[200]
+                                : Colors.blueGrey[800])
+                          : (isDark
+                                ? Colors.blueGrey[800]
+                                : Colors.blueGrey[50]),
+                      foregroundColor: isSelected
+                          ? (isDark ? Colors.black : Colors.white)
+                          : (isDark ? Colors.white : Colors.blueGrey[900]),
+                      elevation: isSelected ? 2 : 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isSelected
+                              ? Colors.transparent
+                              : (isDark
+                                    ? Colors.blueGrey[700]!
+                                    : Colors.blueGrey.shade200),
+                        ),
+                      ),
+                    ),
+                    onPressed: () {
+                      setPopupState(() => selectedSubUnit = label);
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: label == "GRAM" ? 10 : 11,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 2),
+                          const Icon(
+                            Icons.check,
+                            size: 11,
+                            color: Colors.white,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return Dialog(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "PLEASE ENTER CURRENT STOCK OF",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        "${data['name']}",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: stockController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        onChanged: (_) => updateSaveButton(),
+                        decoration: const InputDecoration(
+                          hintText: "Enter amount",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                      if (unit == "Kg")
+                        Row(
+                          children: [buildUnitBtn("Kg"), buildUnitBtn("GRAM")],
+                        )
+                      else if (unit == "Ltr")
+                        Row(children: [buildUnitBtn("Ltr"), buildUnitBtn("ML")])
+                      else if (unit == "PCS")
+                        Row(children: [buildUnitBtn("PCS")])
+                      else
+                        Row(children: [buildUnitBtn(unit)]),
+                      const SizedBox(height: 25),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    "CANCEL",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: canSave
+                                      ? Colors.green
+                                      : Colors.grey[300],
+                                  foregroundColor: canSave
+                                      ? Colors.white
+                                      : Colors.grey[500],
+                                ),
+                                onPressed: !canSave
+                                    ? null
+                                    : () async {
+                                        double val =
+                                            double.tryParse(
+                                              stockController.text.trim(),
+                                            ) ??
+                                            0.0;
+                                        if (selectedSubUnit == "GRAM" ||
+                                            selectedSubUnit == "ML") {
+                                          val = val / 1000.0;
+                                        }
+                                        items.add(data);
+                                        await LocalDatabase.saveToDisk();
+
+                                        globalStock.putIfAbsent(
+                                          widget.categoryName,
+                                          () => {},
+                                        );
+                                        globalStock[widget
+                                                .categoryName]![data['name']!] =
+                                            val;
+                                        await LocalDatabase.saveStockToDisk();
+
+                                        Navigator.pop(ctx);
+                                        _englishNameController.clear();
+                                        _regionalNameController.clear();
+                                        _r.clear();
+                                        _selectedUnit = null;
+                                        _selectedColor = presetColors.first;
+                                        setState(() {});
+                                      },
+                                child: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    "SAVE",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildUnitSelectionButton(String unitLabel) {
     bool isCurrent = _selectedUnit == unitLabel;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -6958,18 +7552,18 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                 'color': _selectedColor,
                               };
                               if (_editingIndex == null) {
-                                items.add(data);
+                                _showStockPopup(data, items);
                               } else {
                                 items[_editingIndex!] = data;
                                 _editingIndex = null;
+                                await LocalDatabase.saveToDisk();
+                                _englishNameController.clear();
+                                _regionalNameController.clear();
+                                _r.clear();
+                                _selectedUnit = null;
+                                _selectedColor = presetColors.first;
+                                setState(() {});
                               }
-                              await LocalDatabase.saveToDisk();
-                              _englishNameController.clear();
-                              _regionalNameController.clear();
-                              _r.clear();
-                              _selectedUnit = null;
-                              _selectedColor = presetColors.first;
-                              setState(() {});
                             },
                       child: Text(
                         _editingIndex == null ? "ADD ITEM" : "SAVE CHANGES",
