@@ -1332,6 +1332,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'addToLedger': addToLedger,
       'cart': _cart,
     };
+    // Update globalStock based on cart
+    for (var item in _cart) {
+      String rawEnglishName = item['name'] ?? "";
+      if (rawEnglishName.contains(" (")) {
+        rawEnglishName = rawEnglishName.split(" (").first;
+      }
+      double qty = double.tryParse(item['qty'].toString()) ?? 0.0;
+
+      for (String cat in globalStock.keys) {
+        if (globalStock[cat]!.containsKey(rawEnglishName)) {
+          if (_partyTransactionType == "SALES") {
+            globalStock[cat]![rawEnglishName] =
+                globalStock[cat]![rawEnglishName]! - qty;
+          } else if (_partyTransactionType == "PURCHASE") {
+            globalStock[cat]![rawEnglishName] =
+                globalStock[cat]![rawEnglishName]! + qty;
+          }
+          break;
+        }
+      }
+    }
+    await LocalDatabase.saveStockToDisk();
+
     String jsonString = jsonEncode(jsonBill);
 
     if (Platform.isWindows) {
@@ -5033,7 +5056,9 @@ class WarehouseScreen extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const StockCategoryScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const StockCategoryScreen(),
+                  ),
                 ),
                 icon: const Icon(Icons.store),
                 label: const Text("STOCK"),
@@ -5119,7 +5144,6 @@ class WarehouseScreen extends StatelessWidget {
   }
 }
 
-
 // --- STOCK SCREENS ---
 class StockCategoryScreen extends StatefulWidget {
   const StockCategoryScreen({super.key});
@@ -5129,10 +5153,53 @@ class StockCategoryScreen extends StatefulWidget {
 }
 
 class _StockCategoryScreenState extends State<StockCategoryScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+  List<Map<String, dynamic>> _searchResults = [];
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+      _searchResults.clear();
+      if (_searchQuery.isNotEmpty) {
+        for (var catName in globalInventory.keys) {
+          var items = globalInventory[catName] ?? [];
+          for (var item in items) {
+            String baseName = item['name'] ?? "";
+            if (baseName.toLowerCase().contains(_searchQuery.toLowerCase())) {
+              _searchResults.add({'categoryName': catName, 'item': item});
+            }
+          }
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     List<String> categories = globalInventory.keys.toList();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    double screenGrandTotal = 0.0;
+    for (String catName in categories) {
+      var items = globalInventory[catName] ?? [];
+      for (var item in items) {
+        String baseName = item['name'] ?? "";
+        double rate = double.tryParse(item['rate'] ?? "0") ?? 0.0;
+        double stockLeft = 0.0;
+        if (globalStock.containsKey(catName) &&
+            globalStock[catName]!.containsKey(baseName)) {
+          stockLeft = globalStock[catName]![baseName]!;
+        }
+        screenGrandTotal += (rate * stockLeft);
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -5147,108 +5214,391 @@ class _StockCategoryScreenState extends State<StockCategoryScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              enabled: false,
-              decoration: InputDecoration(
-                hintText: "Search categories...",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                filled: true,
-                fillColor: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-              ),
-            ),
-            const SizedBox(height: 15),
-            Row(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
               children: [
-                Expanded(
-                  flex: 10,
-                  child: Text("SR NO.",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
-                          fontSize: 12)),
+                TextField(
+                  controller: _searchController,
+                  enabled: true,
+                  onChanged: _onSearchChanged,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9\s]')),
+                  ],
+                  decoration: InputDecoration(
+                    hintText: "Search items...",
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    filled: true,
+                    fillColor: isDark
+                        ? Colors.blueGrey[800]
+                        : Colors.blueGrey[50],
+                  ),
                 ),
-                Expanded(
-                  flex: 60,
-                  child: Text("CATEGORY NAME",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
-                          fontSize: 12)),
-                ),
-                Expanded(
-                  flex: 30,
-                  child: Text("STOCK OF",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
-                          fontSize: 12)),
-                ),
-              ],
-            ),
-            const Divider(),
-            Expanded(
-              child: ListView.builder(
-                itemCount: categories.length,
-                itemBuilder: (context, i) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => StockItemsScreen(
-                              categoryName: categories[i],
+                const SizedBox(height: 15),
+                _searchQuery.isNotEmpty
+                    ? Row(
+                        children: [
+                          Expanded(
+                            flex: 13,
+                            child: Text(
+                              "SR NO.",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.blueGrey[700],
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
+                          Expanded(
+                            flex: 37,
+                            child: Text(
+                              "ITEM NAME",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.blueGrey[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 30,
+                            child: Text(
+                              "STOCK LEFT",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.blueGrey[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 20,
+                            child: Text(
+                              "STOCK OF",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.blueGrey[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            flex: 13,
+                            child: Text(
+                              "SR NO.",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.blueGrey[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 57,
+                            child: Text(
+                              "CATEGORY NAME",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.blueGrey[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 30,
+                            child: Text(
+                              "STOCK OF",
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: isDark
+                                    ? Colors.grey[400]
+                                    : Colors.blueGrey[700],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1),
+          Expanded(
+            child: _searchQuery.isNotEmpty
+                ? ListView.builder(
+                    itemCount: _searchResults.length,
+                    itemBuilder: (context, i) {
+                      var res = _searchResults[i];
+                      String catName = res['categoryName'];
+                      var item = res['item'];
+                      String baseName = item['name'] ?? "";
+
+                      double stockLeft = 0.0;
+                      if (globalStock.containsKey(catName) &&
+                          globalStock[catName]!.containsKey(baseName)) {
+                        stockLeft = globalStock[catName]![baseName]!;
+                      }
+
+                      double rate = double.tryParse(item['rate'] ?? "0") ?? 0.0;
+                      double stockOf = rate * stockLeft;
+
+                      return InkWell(
+                        onTap: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = "";
+                            _searchResults.clear();
+                          });
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => StockItemsScreen(
+                                categoryName: catName,
+                                initialSelectedName: baseName,
+                              ),
+                            ),
+                          ).then((_) => setState(() {}));
+                        },
+                        child: Column(
                           children: [
-                            Expanded(
-                              flex: 10,
-                              child: Text(
-                                "${i + 1}",
-                                style: const TextStyle(fontWeight: FontWeight.bold),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 8.0,
+                                horizontal: 16.0,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16.0,
+                                  horizontal: 8.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.blueGrey[800]
+                                      : Colors.blueGrey[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 13,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          "${i + 1}",
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 37,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          baseName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 30,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          "${stockLeft.toStringAsFixed(2)} ${item['unit']}",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: stockLeft < 0
+                                                ? Colors.red
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 20,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          "Rs. ${stockOf.toStringAsFixed(2)}",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: stockOf < 0
+                                                ? Colors.red
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                            Expanded(
-                              flex: 60,
-                              child: Text(
-                                categories[i],
-                                style: const TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            const Expanded(
-                              flex: 30,
-                              child: Text(
-                                "", // Empty for now
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ),
+                            const Divider(height: 1, thickness: 1),
                           ],
                         ),
+                      );
+                    },
+                  )
+                : ListView.builder(
+                    itemCount: categories.length,
+                    itemBuilder: (context, i) {
+                      String catName = categories[i];
+                      double totalStockOf = 0.0;
+                      var items = globalInventory[catName] ?? [];
+                      for (var item in items) {
+                        String baseName = item['name'] ?? "";
+                        double rate =
+                            double.tryParse(item['rate'] ?? "0") ?? 0.0;
+                        double stockLeft = 0.0;
+                        if (globalStock.containsKey(catName) &&
+                            globalStock[catName]!.containsKey(baseName)) {
+                          stockLeft = globalStock[catName]![baseName]!;
+                        }
+                        totalStockOf += (rate * stockLeft);
+                      }
+
+                      return InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  StockItemsScreen(categoryName: categories[i]),
+                            ),
+                          ).then((_) => setState(() {}));
+                        },
+                        child: Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 8.0,
+                                horizontal: 16.0,
+                              ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16.0,
+                                  horizontal: 8.0,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.blueGrey[800]
+                                      : Colors.blueGrey[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 13,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          "${i + 1}",
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 57,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          categories[i],
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 30,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text(
+                                          "Rs. ${totalStockOf.toStringAsFixed(2)}",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: totalStockOf < 0
+                                                ? Colors.red
+                                                : null,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const Divider(height: 1, thickness: 1),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          if (_searchQuery.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                vertical: 14.0,
+                horizontal: 16.0,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.blueGrey[700] : Colors.blueGrey[100],
+              ),
+              alignment: Alignment.center,
+              child: RichText(
+                text: TextSpan(
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                  children: [
+                    const TextSpan(text: "GRAND TOTAL  :-   "),
+                    TextSpan(
+                      text: "Rs. ${screenGrandTotal.toStringAsFixed(2)}",
+                      style: TextStyle(
+                        color: screenGrandTotal < 0 ? Colors.red : null,
                       ),
                     ),
-                  );
-                },
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -5256,17 +5606,117 @@ class _StockCategoryScreenState extends State<StockCategoryScreen> {
 
 class StockItemsScreen extends StatefulWidget {
   final String categoryName;
-  const StockItemsScreen({super.key, required this.categoryName});
+  final String? initialSelectedName;
+  const StockItemsScreen({
+    super.key,
+    required this.categoryName,
+    this.initialSelectedName,
+  });
 
   @override
   State<StockItemsScreen> createState() => _StockItemsScreenState();
 }
 
 class _StockItemsScreenState extends State<StockItemsScreen> {
+  String? _selectedItemName;
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _qtyController = TextEditingController();
+  String _selectedType = 'PURCHASE';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialSelectedName != null) {
+      _selectedItemName = widget.initialSelectedName;
+      _nameController.text = widget.initialSelectedName!;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _qtyController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildToggleBtn(
+    String label,
+    bool isSelected, {
+    bool disabled = false,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Color bgColor = isSelected
+        ? (isDark ? Colors.blueGrey[200]! : Colors.blueGrey[800]!)
+        : (isDark ? Colors.blueGrey[800]! : Colors.blueGrey[50]!);
+    Color fgColor = isSelected
+        ? (isDark ? Colors.black : Colors.white)
+        : (isDark ? Colors.white : Colors.blueGrey[900]!);
+
+    if (disabled) {
+      bgColor = isSelected
+          ? Colors.grey[400]!
+          : (isDark ? Colors.blueGrey[900]! : Colors.grey[200]!);
+      fgColor = isSelected ? Colors.grey[700]! : Colors.grey[500]!;
+    }
+
+    return SizedBox(
+      height: 21,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.zero,
+          backgroundColor: bgColor,
+          foregroundColor: fgColor,
+          elevation: isSelected && !disabled ? 2 : 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: isSelected || disabled
+                  ? Colors.transparent
+                  : (isDark ? Colors.blueGrey[700]! : Colors.blueGrey.shade200),
+            ),
+          ),
+        ),
+        onPressed: disabled
+            ? null
+            : () => setState(() => _selectedType = label),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 8),
+            ),
+            if (isSelected) ...[
+              const SizedBox(width: 1),
+              Icon(
+                Icons.check,
+                size: 8,
+                color: isDark ? Colors.black : Colors.white,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     var items = globalInventory[widget.categoryName] ?? [];
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    double totalCategoryStockOf = 0.0;
+    for (var item in items) {
+      String baseName = item['name'] ?? "";
+      double rate = double.tryParse(item['rate'] ?? "0") ?? 0.0;
+      double stockLeft = 0.0;
+      if (globalStock.containsKey(widget.categoryName) &&
+          globalStock[widget.categoryName]!.containsKey(baseName)) {
+        stockLeft = globalStock[widget.categoryName]![baseName]!;
+      }
+      totalCategoryStockOf += rate * stockLeft;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -5278,114 +5728,340 @@ class _StockItemsScreenState extends State<StockItemsScreen> {
         ),
         title: Text(
           "${widget.categoryName}'s STOCK",
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Row(
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+            child: Row(
               children: [
                 Expanded(
-                  flex: 10,
-                  child: Text("SR NO.",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
-                          fontSize: 12)),
+                  flex: 30,
+                  child: SizedBox(
+                    height: 45,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.blueGrey[900] : Colors.grey[200],
+                        border: Border.all(
+                          color: isDark ? Colors.white38 : Colors.black38,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      alignment: Alignment.centerLeft,
+                      child: _selectedItemName == null
+                          ? const Text(
+                              "NAME",
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
+                              ),
+                            )
+                          : FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _selectedItemName!,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.grey[400]
+                                      : Colors.grey[600],
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                    ),
+                  ),
                 ),
-                Expanded(
-                  flex: 40,
-                  child: Text("ITEM NAME",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
-                          fontSize: 12)),
-                ),
+                const SizedBox(width: 4),
                 Expanded(
                   flex: 30,
-                  child: Text("STOCK LEFT",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
-                          fontSize: 12)),
+                  child: SizedBox(
+                    height: 45,
+                    child: TextField(
+                      enabled: _selectedItemName != null,
+                      controller: _qtyController,
+                      onChanged: (_) => setState(() {}),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                          RegExp(r'^\d*\.?\d*'),
+                        ),
+                      ],
+                      decoration: const InputDecoration(
+                        hintText: "QTY",
+                        hintStyle: TextStyle(fontSize: 10),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 0,
+                        ),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
                 ),
+                const SizedBox(width: 4),
                 Expanded(
-                  flex: 20,
-                  child: Text("STOCK OF",
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
-                          fontSize: 12)),
+                  flex: 30,
+                  child: Column(
+                    children: [
+                      _buildToggleBtn("PURCHASE", _selectedType == 'PURCHASE'),
+                      const SizedBox(height: 3),
+                      _buildToggleBtn("SALES", _selectedType == 'SALES'),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  flex: 10,
+                  child: SizedBox(
+                    height: 45,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        backgroundColor:
+                            (_selectedItemName != null &&
+                                _qtyController.text.trim().isNotEmpty)
+                            ? Colors.green
+                            : Colors.grey.withOpacity(0.5),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed:
+                          (_selectedItemName == null ||
+                              _qtyController.text.trim().isEmpty)
+                          ? null
+                          : () async {
+                              double qty =
+                                  double.tryParse(_qtyController.text.trim()) ??
+                                  0.0;
+                              if (qty > 0) {
+                                double currentStock =
+                                    globalStock[widget
+                                        .categoryName]![_selectedItemName!] ??
+                                    0.0;
+                                if (_selectedType == 'PURCHASE') {
+                                  globalStock[widget
+                                          .categoryName]![_selectedItemName!] =
+                                      currentStock + qty;
+                                } else {
+                                  globalStock[widget
+                                          .categoryName]![_selectedItemName!] =
+                                      currentStock - qty;
+                                }
+                                await LocalDatabase.saveStockToDisk();
+                                setState(() {
+                                  _selectedItemName = null;
+                                  _nameController.clear();
+                                  _qtyController.clear();
+                                });
+                              }
+                            },
+                      child: const Icon(Icons.add, size: 20),
+                    ),
+                  ),
                 ),
               ],
             ),
-            const Divider(),
-            Expanded(
-              child: ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, i) {
-                  var item = items[i];
-                  String baseName = item['name'] ?? "";
-                  String regName = item['regional_name'] ?? "";
-                  String formattedDisplayName = regName.isNotEmpty
-                      ? "$baseName ($regName)"
-                      : baseName;
-                      
-                  double stockLeft = 0.0;
-                  if (globalStock.containsKey(widget.categoryName) &&
-                      globalStock[widget.categoryName]!.containsKey(baseName)) {
-                    stockLeft = globalStock[widget.categoryName]![baseName]!;
-                  }
-                  
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 8.0),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
-                        borderRadius: BorderRadius.circular(8),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 13,
+                  child: Text(
+                    "SR NO.",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 37,
+                  child: Text(
+                    "ITEM NAME",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 30,
+                  child: Text(
+                    "STOCK LEFT",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 20,
+                  child: Text(
+                    "STOCK OF",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.grey[400] : Colors.blueGrey[700],
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1),
+          Expanded(
+            child: ListView.builder(
+              itemCount: items.length,
+              itemBuilder: (context, i) {
+                var item = items[i];
+                String baseName = item['name'] ?? "";
+
+                double stockLeft = 0.0;
+                if (globalStock.containsKey(widget.categoryName) &&
+                    globalStock[widget.categoryName]!.containsKey(baseName)) {
+                  stockLeft = globalStock[widget.categoryName]![baseName]!;
+                }
+
+                double rate = double.tryParse(item['rate'] ?? "0") ?? 0.0;
+                double stockOf = rate * stockLeft;
+
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 8.0,
+                        horizontal: 16.0,
                       ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 10,
-                            child: Text(
-                              "${i + 1}",
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _selectedItemName = baseName;
+                            _nameController.text = baseName;
+                            _qtyController.clear();
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16.0,
+                            horizontal: 8.0,
                           ),
-                          Expanded(
-                            flex: 40,
-                            child: Text(
-                              formattedDisplayName,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.blueGrey[800]
+                                : Colors.blueGrey[50],
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          Expanded(
-                            flex: 30,
-                            child: Text(
-                              "${stockLeft.toStringAsFixed(2)} ${item['unit']}",
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                flex: 13,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    "${i + 1}",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 37,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    baseName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 30,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    "${stockLeft.toStringAsFixed(2)} ${item['unit']}",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: stockLeft < 0 ? Colors.red : null,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 20,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    "Rs. ${stockOf.toStringAsFixed(2)}",
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: stockOf < 0 ? Colors.red : null,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const Expanded(
-                            flex: 20,
-                            child: Text(
-                              "", // Empty for now
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  );
-                },
+                    const Divider(height: 1, thickness: 1),
+                  ],
+                );
+              },
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              vertical: 14.0,
+              horizontal: 16.0,
+            ),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.blueGrey[700] : Colors.blueGrey[100],
+            ),
+            alignment: Alignment.center,
+            child: RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                children: [
+                  const TextSpan(text: "TOTAL  :-   "),
+                  TextSpan(
+                    text: "Rs. ${totalCategoryStockOf.toStringAsFixed(2)}",
+                    style: TextStyle(
+                      color: totalCategoryStockOf < 0 ? Colors.red : null,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -6353,7 +7029,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 }
-
 
 // --- HISTORY SCREEN ---
 
@@ -8066,63 +8741,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: allValid
-                                      ? Colors.green
-                                      : Colors.grey.withOpacity(0.5),
-                                  foregroundColor: allValid
-                                      ? Colors.white
-                                      : Colors.white70,
-                                ),
-                                onPressed: !allValid
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          globalParties.add({
-                                            'name': nameController.text.trim(),
-                                            'opening_date': dateController.text
-                                                .trim(),
-                                            'opening_balance':
-                                                double.tryParse(
-                                                  balanceController.text.trim(),
-                                                ) ??
-                                                0.0,
-                                            'opening_type': isDebit
-                                                ? 'debit'
-                                                : 'credit',
-                                          });
-                                        });
-                                        LocalDatabase.savePartiesToDisk();
-
-                                        nameController.clear();
-                                        dateController.clear();
-                                        balanceController.clear();
-                                        checkFields();
-
-                                        messenger.showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              "Party added successfully!",
-                                            ),
-                                            backgroundColor: Colors.green,
-                                          ),
-                                        );
-                                      },
-                                child: const Text(
-                                  "ADD PARTY",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: SizedBox(
-                              height: 45,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.red,
                                   foregroundColor: Colors.white,
                                 ),
@@ -8166,6 +8784,63 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                 },
                                 child: const Text(
                                   "CLOSE",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: SizedBox(
+                              height: 45,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: allValid
+                                      ? Colors.green
+                                      : Colors.grey.withOpacity(0.5),
+                                  foregroundColor: allValid
+                                      ? Colors.white
+                                      : Colors.white70,
+                                ),
+                                onPressed: !allValid
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          globalParties.add({
+                                            'name': nameController.text.trim(),
+                                            'opening_date': dateController.text
+                                                .trim(),
+                                            'opening_balance':
+                                                double.tryParse(
+                                                  balanceController.text.trim(),
+                                                ) ??
+                                                0.0,
+                                            'opening_type': isDebit
+                                                ? 'debit'
+                                                : 'credit',
+                                          });
+                                        });
+                                        LocalDatabase.savePartiesToDisk();
+
+                                        nameController.clear();
+                                        dateController.clear();
+                                        balanceController.clear();
+                                        checkFields();
+
+                                        messenger.showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              "Party added successfully!",
+                                            ),
+                                            backgroundColor: Colors.green,
+                                          ),
+                                        );
+                                      },
+                                child: const Text(
+                                  "ADD PARTY",
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
