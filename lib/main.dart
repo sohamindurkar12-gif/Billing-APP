@@ -934,6 +934,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _editingBillTime;
   String? _editingCustomerName;
   bool _editingBillAddToLedger = true;
+  List<Map<String, dynamic>>? _editingOriginalCart;
+  String? _editingOriginalPartyTransactionType;
 
   // Keyboard shortcut state (Windows only)
   String _keyBuffer = "";
@@ -1332,6 +1334,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'addToLedger': addToLedger,
       'cart': _cart,
     };
+    // Revert old stock if editing an existing bill
+    if (_isEditingBill &&
+        _editingOriginalCart != null &&
+        _editingOriginalPartyTransactionType != null) {
+      for (var item in _editingOriginalCart!) {
+        String rawEnglishName = item['name'] ?? "";
+        if (rawEnglishName.contains(" (")) {
+          rawEnglishName = rawEnglishName.split(" (").first;
+        }
+        double qty = double.tryParse(item['qty'].toString()) ?? 0.0;
+        for (String cat in globalStock.keys) {
+          if (globalStock[cat]!.containsKey(rawEnglishName)) {
+            if (_editingOriginalPartyTransactionType == "SALES") {
+              globalStock[cat]![rawEnglishName] =
+                  globalStock[cat]![rawEnglishName]! + qty;
+            } else if (_editingOriginalPartyTransactionType == "PURCHASE") {
+              globalStock[cat]![rawEnglishName] =
+                  globalStock[cat]![rawEnglishName]! - qty;
+            }
+            break;
+          }
+        }
+      }
+    }
+
     // Update globalStock based on cart
     for (var item in _cart) {
       String rawEnglishName = item['name'] ?? "";
@@ -1396,6 +1423,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _editingBillDate = null;
           _editingBillTime = null;
           _editingCustomerName = null;
+          _editingOriginalCart = null;
+          _editingOriginalPartyTransactionType = null;
         });
       }
       return;
@@ -1496,6 +1525,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _editingBillDate = null;
           _editingBillTime = null;
           _editingCustomerName = null;
+          _editingOriginalCart = null;
+          _editingOriginalPartyTransactionType = null;
         });
       }
     }
@@ -1524,7 +1555,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       String oDateStr = _selectedParty!['opening_date'] ?? "";
       if (oDateStr.isNotEmpty) {
         try {
-          List<String> parts = oDateStr.split('-');
+          List<String> parts = oDateStr.split(RegExp(r'[-./]'));
           openingDate = DateTime(
             int.parse(parts[2]),
             int.parse(parts[1]),
@@ -1542,7 +1573,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool isTimeValid = true;
     bool globalShowRateSetting = true;
 
-    final dateRegex = RegExp(r'^(0[1-9]|[12]\d|3[01])-(0[1-9]|1[0-2])-\d{4}$');
+    final dateRegex = RegExp(
+      r'^(0[1-9]|[12]\d|3[01])[-./](0[1-9]|1[0-2])[-./]\d{4}$',
+    );
     final timeRegex = RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$');
 
     void validateDateTime(Function setPopupState) {
@@ -1556,7 +1589,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             addToLedger &&
             openingDate != null) {
           try {
-            List<String> parts = dateController.text.trim().split('-');
+            List<String> parts = dateController.text.trim().split(
+              RegExp(r'[-./]'),
+            );
             DateTime enteredDate = DateTime(
               int.parse(parts[2]),
               int.parse(parts[1]),
@@ -1781,7 +1816,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       try {
                                         List<String> parts = dateController.text
                                             .trim()
-                                            .split('-');
+                                            .split(RegExp(r'[-./]'));
                                         DateTime enteredDate = DateTime(
                                           int.parse(parts[2]),
                                           int.parse(parts[1]),
@@ -1837,7 +1872,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 List<String> parts =
                                                     dateController.text
                                                         .trim()
-                                                        .split('-');
+                                                        .split(
+                                                          RegExp(r'[-./]'),
+                                                        );
                                                 DateTime enteredDate = DateTime(
                                                   int.parse(parts[2]),
                                                   int.parse(parts[1]),
@@ -2014,6 +2051,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .replaceAll(RegExp(r'[\r\n]'), ' ')
         .trim();
     String completeDisplayName = baseName;
+
+    double stockLeft = 0.0;
+    for (String cat in globalStock.keys) {
+      if (globalStock[cat]!.containsKey(baseName)) {
+        stockLeft = globalStock[cat]![baseName]!;
+        break;
+      }
+    }
 
     final FocusNode numpadFocusNode = FocusNode();
 
@@ -2214,11 +2259,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: Text(
-                              completeDisplayName.toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                            child: RichText(
+                              text: TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: completeDisplayName.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.white
+                                          : Colors.black87,
+                                    ),
+                                  ),
+                                  TextSpan(
+                                    text:
+                                        "  ( ${stockLeft.toStringAsFixed(2)} $masterUnit LEFT )",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: stockLeft < 0
+                                          ? Colors.red
+                                          : Colors.blueGrey,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -3404,6 +3471,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _isEditingBill = false;
                           _editingBillId = null;
                           _editingOriginalPdfName = null;
+                          _editingOriginalCart = null;
+                          _editingOriginalPartyTransactionType = null;
                         });
                       },
                       child: const Row(
@@ -3684,6 +3753,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _editingBillTime = jsonBill['time'];
       _partyTransactionType = jsonBill['partyTransactionType'] ?? "SALES";
       _editingBillAddToLedger = jsonBill['addToLedger'] ?? true;
+      _editingOriginalCart = List<Map<String, dynamic>>.from(
+        jsonBill['cart'] ?? [],
+      );
+      _editingOriginalPartyTransactionType =
+          jsonBill['partyTransactionType'] ?? "SALES";
     });
   }
 }
@@ -6209,7 +6283,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   DateTime? _parseDate(String dateStr) {
     try {
-      final parts = dateStr.split('-');
+      final parts = dateStr.split(RegExp(r'[-./]'));
       if (parts.length == 3) {
         return DateTime(
           int.parse(parts[2]),
@@ -6232,7 +6306,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final RegExp dateRegExp = RegExp(
-              r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+              r'^(0[1-9]|[12][0-9]|3[01])[-./](0[1-9]|1[0-2])[-./]\d{4}$',
             );
             bool isValid =
                 fromCtrl.text.isNotEmpty &&
@@ -6263,7 +6337,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         onChanged: (_) => setDialogState(() {}),
                         keyboardType: TextInputType.datetime,
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9\-./]'),
+                          ),
                         ],
                         decoration: const InputDecoration(
                           hintText: "FROM (In DD-MM-YYYY)",
@@ -6303,7 +6379,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         onChanged: (_) => setDialogState(() {}),
                         keyboardType: TextInputType.datetime,
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9\-./]'),
+                          ),
                         ],
                         decoration: const InputDecoration(
                           hintText: "TO (In DD-MM-YYYY)",
@@ -7473,21 +7551,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         false;
   }
 
-  void _onReorderCategories(int oldIndex, int newIndex) async {
-    setState(() {
-      if (oldIndex < newIndex) newIndex -= 1;
-      List<String> keys = globalInventory.keys.toList();
-      final String movedKey = keys.removeAt(oldIndex);
-      keys.insert(newIndex, movedKey);
-      Map<String, List<Map<String, String>>> sortedMap = {};
-      for (var key in keys) {
-        sortedMap[key] = globalInventory[key]!;
-      }
-      globalInventory = sortedMap;
-    });
-    await LocalDatabase.saveToDisk();
-  }
-
   @override
   Widget build(BuildContext context) {
     List<String> names = globalInventory.keys.toList();
@@ -7531,6 +7594,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                               if (catName.isNotEmpty) {
                                 globalInventory[catName] = [];
                                 globalCategoryColors[catName] = color;
+                                var keys = globalInventory.keys.toList();
+                                keys.sort(
+                                  (a, b) => a.toLowerCase().compareTo(
+                                    b.toLowerCase(),
+                                  ),
+                                );
+                                Map<String, List<Map<String, String>>>
+                                sortedMap = {};
+                                for (var key in keys) {
+                                  sortedMap[key] = globalInventory[key]!;
+                                }
+                                globalInventory = sortedMap;
                                 await LocalDatabase.saveToDisk();
                                 setState(() {});
                               }
@@ -7544,23 +7619,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             ),
           ),
           Expanded(
-            child: ReorderableListView.builder(
-              buildDefaultDragHandles: false,
+            child: ListView.builder(
               itemCount: names.length,
-              onReorder: _onReorderCategories,
               itemBuilder: (context, i) {
                 return Padding(
                   key: ValueKey("category_row_${names[i]}"),
                   padding: const EdgeInsets.all(8.0),
                   child: Row(
                     children: [
-                      ReorderableDragStartListener(
-                        index: i,
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 4.0),
-                          child: Icon(Icons.menu, color: Colors.orange),
-                        ),
-                      ),
                       Container(
                         margin: const EdgeInsets.only(right: 8.0),
                         width: 28,
@@ -7806,16 +7872,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
     _r.addListener(() => setState(() {}));
   }
 
-  void _onReorderItems(int oldIndex, int newIndex) async {
-    setState(() {
-      if (oldIndex < newIndex) newIndex -= 1;
-      var items = globalInventory[widget.categoryName]!;
-      final movedItem = items.removeAt(oldIndex);
-      items.insert(newIndex, movedItem);
-    });
-    await LocalDatabase.saveToDisk();
-  }
-
   Future<void> _showStockPopup(
     Map<String, String> data,
     List<Map<String, String>> items,
@@ -7999,6 +8055,13 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                           val = val / 1000.0;
                                         }
                                         items.add(data);
+                                        items.sort(
+                                          (a, b) => (a['name'] ?? '')
+                                              .toLowerCase()
+                                              .compareTo(
+                                                (b['name'] ?? '').toLowerCase(),
+                                              ),
+                                        );
                                         await LocalDatabase.saveToDisk();
 
                                         globalStock.putIfAbsent(
@@ -8254,10 +8317,8 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
             ),
             const Divider(height: 30),
             Expanded(
-              child: ReorderableListView.builder(
-                buildDefaultDragHandles: false,
+              child: ListView.builder(
                 itemCount: items.length,
-                onReorder: _onReorderItems,
                 itemBuilder: (context, i) {
                   bool isEditing = _editingIndex == i;
                   String baseName = items[i]['name'] ?? "";
@@ -8273,13 +8334,6 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Row(
                       children: [
-                        ReorderableDragStartListener(
-                          index: i,
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 4.0),
-                            child: Icon(Icons.menu, color: Colors.orange),
-                          ),
-                        ),
                         Container(
                           margin: const EdgeInsets.only(right: 8.0),
                           width: 28,
@@ -8436,16 +8490,6 @@ class LedgerScreen extends StatefulWidget {
 class _LedgerScreenState extends State<LedgerScreen> {
   String _searchQuery = "";
 
-  void _onReorderParties(int oldIndex, int newIndex) {
-    if (_searchQuery.isNotEmpty) return;
-    if (newIndex > oldIndex) newIndex -= 1;
-    setState(() {
-      final item = globalParties.removeAt(oldIndex);
-      globalParties.insert(newIndex, item);
-    });
-    LocalDatabase.savePartiesToDisk();
-  }
-
   Future<bool> _showWarning(String msg) async {
     return await showDialog<bool>(
           context: context,
@@ -8541,7 +8585,7 @@ class _LedgerScreenState extends State<LedgerScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final RegExp dateRegExp = RegExp(
-              r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+              r'^(0[1-9]|[12][0-9]|3[01])[-./](0[1-9]|1[0-2])[-./]\d{4}$',
             );
 
             bool isDateValid = dateRegExp.hasMatch(dateController.text.trim());
@@ -8593,7 +8637,9 @@ class _LedgerScreenState extends State<LedgerScreen> {
                         onChanged: (_) => checkFields(),
                         keyboardType: TextInputType.datetime,
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9\-./]'),
+                          ),
                         ],
                         decoration: const InputDecoration(
                           hintText: "OPENING DATE (DD-MM-YYYY)",
@@ -8822,6 +8868,14 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                                 ? 'debit'
                                                 : 'credit',
                                           });
+                                          globalParties.sort(
+                                            (a, b) => (a['name'] ?? '')
+                                                .toLowerCase()
+                                                .compareTo(
+                                                  (b['name'] ?? '')
+                                                      .toLowerCase(),
+                                                ),
+                                          );
                                         });
                                         LocalDatabase.savePartiesToDisk();
 
@@ -8943,10 +8997,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
                           : "No parties found. Click ADD PARTY above.",
                     ),
                   )
-                : ReorderableListView.builder(
-                    buildDefaultDragHandles: false,
+                : ListView.builder(
                     itemCount: filteredParties.length,
-                    onReorder: _onReorderParties,
                     itemBuilder: (context, i) {
                       final party = filteredParties[i];
                       final pName = party['name'] ?? "Unknown";
@@ -8969,28 +9021,6 @@ class _LedgerScreenState extends State<LedgerScreen> {
                           children: [
                             Row(
                               children: [
-                                _searchQuery.isNotEmpty
-                                    ? const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          horizontal: 4.0,
-                                        ),
-                                        child: Icon(
-                                          Icons.menu,
-                                          color: Colors.grey,
-                                        ),
-                                      )
-                                    : ReorderableDragStartListener(
-                                        index: i,
-                                        child: const Padding(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 4.0,
-                                          ),
-                                          child: Icon(
-                                            Icons.menu,
-                                            color: Colors.orange,
-                                          ),
-                                        ),
-                                      ),
                                 Container(
                                   margin: const EdgeInsets.only(
                                     right: 8.0,
@@ -9211,7 +9241,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
   DateTime? _parseDate(String dateStr) {
     try {
-      final parts = dateStr.split('-');
+      final parts = dateStr.split(RegExp(r'[-./]'));
       if (parts.length != 3) return null;
       return DateTime(
         int.parse(parts[2]),
@@ -9401,7 +9431,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
     for (int i = 0; i < displayedTransactions.length; i++) {
       final t = displayedTransactions[i];
-      final date = t['date'] ?? '';
+      final date = (t['date'] ?? '').replaceAll(RegExp(r'[-./]'), '-');
       final debitVal = t['debit'] ?? 0.0;
       final creditVal = t['credit'] ?? 0.0;
       final debitStr = debitVal > 0 ? debitVal.toStringAsFixed(2) : '';
@@ -9682,7 +9712,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final RegExp dateRegExp = RegExp(
-              r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+              r'^(0[1-9]|[12][0-9]|3[01])[-./](0[1-9]|1[0-2])[-./]\d{4}$',
             );
             bool isValid =
                 fromCtrl.text.isNotEmpty &&
@@ -9713,7 +9743,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                         onChanged: (_) => setDialogState(() {}),
                         keyboardType: TextInputType.datetime,
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9\-./]'),
+                          ),
                         ],
                         decoration: const InputDecoration(
                           hintText: "FROM (In DD-MM-YYYY)",
@@ -9753,7 +9785,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                         onChanged: (_) => setDialogState(() {}),
                         keyboardType: TextInputType.datetime,
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9\-./]'),
+                          ),
                         ],
                         decoration: const InputDecoration(
                           hintText: "TO (In DD-MM-YYYY)",
@@ -9910,7 +9944,10 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
     String displayOpeningDate = '';
     if (isOriginalOpening) {
-      displayOpeningDate = party['opening_date'] ?? '';
+      displayOpeningDate = (party['opening_date'] ?? '').replaceAll(
+        RegExp(r'[-./]'),
+        '-',
+      );
     } else {
       if (_isCustomMode) {
         displayOpeningDate =
@@ -9951,7 +9988,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     bool isValidAdd = false;
     if (_amountCtrl.text.isNotEmpty && _dateCtrl.text.isNotEmpty) {
       final RegExp dateRegExp = RegExp(
-        r'^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[0-2])-\d{4}$',
+        r'^(0[1-9]|[12][0-9]|3[01])[-./](0[1-9]|1[0-2])[-./]\d{4}$',
       );
       if (dateRegExp.hasMatch(_dateCtrl.text.trim())) {
         DateTime? enteredDate = _parseDate(_dateCtrl.text.trim());
@@ -10093,7 +10130,9 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                         onChanged: (_) => setState(() {}),
                         keyboardType: TextInputType.datetime,
                         inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[0-9\-]')),
+                          FilteringTextInputFormatter.allow(
+                            RegExp(r'[0-9\-./]'),
+                          ),
                         ],
                         decoration: const InputDecoration(
                           hintText: "DATE",
@@ -10808,7 +10847,10 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
 
                   final t =
                       displayedTransactions[isBeforePartyOpening ? i : i - 1];
-                  final date = t['date'] ?? '';
+                  final date = (t['date'] ?? '').replaceAll(
+                    RegExp(r'[-./]'),
+                    '-',
+                  );
                   final debitVal = t['debit'] ?? 0.0;
                   final creditVal = t['credit'] ?? 0.0;
 
