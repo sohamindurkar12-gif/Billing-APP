@@ -5181,7 +5181,7 @@ class _SetupScreenState extends State<SetupScreen> {
             // Placeholder removed
             const Center(
               child: Text(
-                "COMPLETELY DESIGNED AND MADE BY SOHAM INDURKAR",
+                "COMPLETELY DESIGNED AND MADE BY SOHAM INDURKAR\n sohamindurkar12@gmail.com",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 10,
@@ -5325,7 +5325,7 @@ class WarehouseScreen extends StatelessWidget {
             const Spacer(),
             const Center(
               child: Text(
-                "COMPLETELY DESIGNED AND MADE BY SOHAM INDURKAR",
+                "COMPLETELY DESIGNED AND MADE BY SOHAM INDURKAR\n sohamindurkar12@gmail.com",
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 10,
