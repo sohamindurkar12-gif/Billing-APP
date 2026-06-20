@@ -909,6 +909,22 @@ class CloudDatabase {
   }
 }
 
+class TempBill {
+  List<Map<String, dynamic>> cart = [];
+  bool isPartySelected = false;
+  Map<String, dynamic>? selectedParty;
+  String partyTransactionType = "SALES";
+  bool isEditingBill = false;
+  String? editingBillId;
+  String? editingOriginalPdfName;
+  String? editingBillDate;
+  String? editingBillTime;
+  String? editingCustomerName;
+  bool editingBillAddToLedger = true;
+  List<Map<String, dynamic>>? editingOriginalCart;
+  String? editingOriginalPartyTransactionType;
+}
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
   @override
@@ -918,24 +934,64 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<Map<String, String>> _searchResults = [];
-  List<Map<String, dynamic>> _cart = [];
+  List<TempBill> _tempBills = [TempBill()];
+  int _currentTempBillIndex = 0;
+
+  TempBill get _currentTempBill => _tempBills[_currentTempBillIndex];
+
+  List<Map<String, dynamic>> get _cart => _currentTempBill.cart;
+  set _cart(List<Map<String, dynamic>> val) => _currentTempBill.cart = val;
+
   bool _isLoadingDb = true;
   String? _selectedCategoryForGrid;
 
-  bool _isPartySelected = false;
-  Map<String, dynamic>? _selectedParty;
-  final TextEditingController _partySearchController = TextEditingController();
-  String _partyTransactionType = "SALES";
+  bool get _isPartySelected => _currentTempBill.isPartySelected;
+  set _isPartySelected(bool val) => _currentTempBill.isPartySelected = val;
 
-  bool _isEditingBill = false;
-  String? _editingBillId;
-  String? _editingOriginalPdfName;
-  String? _editingBillDate;
-  String? _editingBillTime;
-  String? _editingCustomerName;
-  bool _editingBillAddToLedger = true;
-  List<Map<String, dynamic>>? _editingOriginalCart;
-  String? _editingOriginalPartyTransactionType;
+  Map<String, dynamic>? get _selectedParty => _currentTempBill.selectedParty;
+  set _selectedParty(Map<String, dynamic>? val) =>
+      _currentTempBill.selectedParty = val;
+
+  final TextEditingController _partySearchController = TextEditingController();
+
+  String get _partyTransactionType => _currentTempBill.partyTransactionType;
+  set _partyTransactionType(String val) =>
+      _currentTempBill.partyTransactionType = val;
+
+  bool get _isEditingBill => _currentTempBill.isEditingBill;
+  set _isEditingBill(bool val) => _currentTempBill.isEditingBill = val;
+
+  String? get _editingBillId => _currentTempBill.editingBillId;
+  set _editingBillId(String? val) => _currentTempBill.editingBillId = val;
+
+  String? get _editingOriginalPdfName =>
+      _currentTempBill.editingOriginalPdfName;
+  set _editingOriginalPdfName(String? val) =>
+      _currentTempBill.editingOriginalPdfName = val;
+
+  String? get _editingBillDate => _currentTempBill.editingBillDate;
+  set _editingBillDate(String? val) => _currentTempBill.editingBillDate = val;
+
+  String? get _editingBillTime => _currentTempBill.editingBillTime;
+  set _editingBillTime(String? val) => _currentTempBill.editingBillTime = val;
+
+  String? get _editingCustomerName => _currentTempBill.editingCustomerName;
+  set _editingCustomerName(String? val) =>
+      _currentTempBill.editingCustomerName = val;
+
+  bool get _editingBillAddToLedger => _currentTempBill.editingBillAddToLedger;
+  set _editingBillAddToLedger(bool val) =>
+      _currentTempBill.editingBillAddToLedger = val;
+
+  List<Map<String, dynamic>>? get _editingOriginalCart =>
+      _currentTempBill.editingOriginalCart;
+  set _editingOriginalCart(List<Map<String, dynamic>>? val) =>
+      _currentTempBill.editingOriginalCart = val;
+
+  String? get _editingOriginalPartyTransactionType =>
+      _currentTempBill.editingOriginalPartyTransactionType;
+  set _editingOriginalPartyTransactionType(String? val) =>
+      _currentTempBill.editingOriginalPartyTransactionType = val;
 
   // Keyboard shortcut state (Windows only)
   String _keyBuffer = "";
@@ -1414,17 +1470,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
         setState(() {
-          _cart = [];
-          _isPartySelected = false;
-          _partyTransactionType = "SALES";
-          _isEditingBill = false;
-          _editingBillId = null;
-          _editingOriginalPdfName = null;
-          _editingBillDate = null;
-          _editingBillTime = null;
-          _editingCustomerName = null;
-          _editingOriginalCart = null;
-          _editingOriginalPartyTransactionType = null;
+          _tempBills.removeAt(_currentTempBillIndex);
+          if (_tempBills.isEmpty) {
+            _tempBills.add(TempBill());
+          }
+          if (_currentTempBillIndex >= _tempBills.length) {
+            _currentTempBillIndex = _tempBills.length - 1;
+          }
         });
       }
       return;
@@ -1516,17 +1568,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
         setState(() {
-          _cart = [];
-          _isPartySelected = false;
-          _partyTransactionType = "SALES";
-          _isEditingBill = false;
-          _editingBillId = null;
-          _editingOriginalPdfName = null;
-          _editingBillDate = null;
-          _editingBillTime = null;
-          _editingCustomerName = null;
-          _editingOriginalCart = null;
-          _editingOriginalPartyTransactionType = null;
+          _tempBills.removeAt(_currentTempBillIndex);
+          if (_tempBills.isEmpty) {
+            _tempBills.add(TempBill());
+          }
+          if (_currentTempBillIndex >= _tempBills.length) {
+            _currentTempBillIndex = _tempBills.length - 1;
+          }
         });
       }
     }
@@ -3328,12 +3376,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildTabRow() {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: 41,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[100],
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _tempBills.length,
+              itemBuilder: (context, index) {
+                bool isSelected = index == _currentTempBillIndex;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _currentTempBillIndex = index;
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    width: 32,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSelected
+                          ? Colors.blue
+                          : (isDark
+                                ? Colors.blueGrey[600]
+                                : Colors.blueGrey[300]),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      "${index + 1}",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            icon: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.green,
+              ),
+              child: const Icon(Icons.add, color: Colors.white, size: 16),
+            ),
+            onPressed: () {
+              setState(() {
+                _tempBills.add(TempBill());
+                _currentTempBillIndex = _tempBills.length - 1;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMobileAppView(bool showBottomBar, double totalBill) {
+    Widget tabRow = _buildTabRow();
+
     if (!_isPartySelected) {
       return GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         behavior: HitTestBehavior.translucent,
-        child: _buildPartySelectionView(),
+        child: Column(
+          children: [
+            tabRow,
+            Container(height: 1, color: Colors.grey.withOpacity(0.5)),
+            Expanded(child: _buildPartySelectionView()),
+          ],
+        ),
       );
     }
 
@@ -3349,6 +3472,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       behavior: HitTestBehavior.translucent,
       child: Column(
         children: [
+          tabRow,
+          Container(height: 1, color: Colors.grey.withOpacity(0.5)),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: Theme.of(context).brightness == Brightness.dark
@@ -3382,9 +3507,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   : Colors.blueGrey[50]),
                         foregroundColor: _isEditingBill
                             ? Colors.grey[500]
-                            : (Theme.of(context).brightness == Brightness.dark
-                                  ? Colors.white
-                                  : Colors.blueGrey[900]),
+                            : (_partyTransactionType == "SALES"
+                                  ? Colors.green
+                                  : (_partyTransactionType == "PURCHASE"
+                                        ? Colors.blue
+                                        : (Theme.of(context).brightness ==
+                                                  Brightness.dark
+                                              ? Colors.white
+                                              : Colors.blueGrey[900]))),
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
@@ -3465,14 +3595,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           if (!confirm) return;
                         }
                         setState(() {
-                          _cart.clear();
-                          _isPartySelected = false;
-                          _partyTransactionType = "SALES";
-                          _isEditingBill = false;
-                          _editingBillId = null;
-                          _editingOriginalPdfName = null;
-                          _editingOriginalCart = null;
-                          _editingOriginalPartyTransactionType = null;
+                          _tempBills[_currentTempBillIndex] = TempBill();
                         });
                       },
                       child: const Row(
@@ -3734,6 +3857,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String originalPdfName,
   ) {
     setState(() {
+      _tempBills.add(TempBill());
+      _currentTempBillIndex = _tempBills.length - 1;
+
       _cart = List<Map<String, dynamic>>.from(jsonBill['cart'] ?? []);
       _isPartySelected = true;
       _selectedParty = null;
