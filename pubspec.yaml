@@ -52,12 +52,14 @@ dependencies:
   window_manager: ^0.5.1
   google_sign_in_dartio: ^0.3.0
   screen_retriever: ^0.2.1
+  flutter_pos_printer_platform_image_3: ^1.2.4
+  esc_pos_utils_plus: ^2.0.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_launcher_icons: "^0.13.1"
-  image: ^4.8.0
+
 
 flutter_launcher_icons:
   android: "ic_launcher"

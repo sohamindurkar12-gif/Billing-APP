@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'dart:typed_data';
 import 'package:shared_storage/shared_storage.dart' as saf;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -179,6 +181,9 @@ Map<String, String> globalCategoryColors = {};
 String currentLayoutSetting = "HL";
 String globalShopName = "RETAIL INVOICE";
 String currentThemeSetting = "LIGHT";
+String? globalPrinterName;
+String? globalPrinterAddress;
+int? globalPrinterType; // 0: bluetooth, 1: usb, 2: network
 User? currentFirebaseUser;
 
 // --- COLOR CONSTANTS & PICKER UI ---
@@ -544,6 +549,9 @@ class LocalDatabase {
         "layout": currentLayoutSetting,
         "shopName": globalShopName,
         "theme": currentThemeSetting,
+        "printerName": globalPrinterName,
+        "printerAddress": globalPrinterAddress,
+        "printerType": globalPrinterType,
       });
       final bytes = Uint8List.fromList(utf8.encode(content));
 
@@ -595,6 +603,9 @@ class LocalDatabase {
         currentLayoutSetting = decoded["layout"] ?? "HL";
         globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
         currentThemeSetting = decoded["theme"] ?? "LIGHT";
+        globalPrinterName = decoded["printerName"];
+        globalPrinterAddress = decoded["printerAddress"];
+        globalPrinterType = decoded["printerType"];
       }
     } catch (e) {
       debugPrint("Error loading app configuration: $e");
@@ -1461,6 +1472,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       File jFile = File("$jsonDir\\$finalFileName.json");
       await jFile.writeAsString(jsonString);
 
+      await _printBillReceipt(
+        customerName,
+        showRateColumn,
+        dateString,
+        timeString,
+      );
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1529,6 +1547,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         jsonBillsUri = newDir?.uri;
       }
 
+      await _printBillReceipt(
+        customerName,
+        showRateColumn,
+        dateString,
+        timeString,
+      );
+
       if (jsonBillsUri != null) {
         if (_isEditingBill && _editingOriginalPdfName != null) {
           final oldJsonName = _editingOriginalPdfName!.replaceAll(
@@ -1576,6 +1601,385 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _currentTempBillIndex = _tempBills.length - 1;
           }
         });
+      }
+    }
+  }
+
+  String _numberToWords(int number) {
+    if (number == 0) return "ZERO";
+
+    final List<String> units = [
+      "",
+      "ONE",
+      "TWO",
+      "THREE",
+      "FOUR",
+      "FIVE",
+      "SIX",
+      "SEVEN",
+      "EIGHT",
+      "NINE",
+      "TEN",
+      "ELEVEN",
+      "TWELVE",
+      "THIRTEEN",
+      "FOURTEEN",
+      "FIFTEEN",
+      "SIXTEEN",
+      "SEVENTEEN",
+      "EIGHTEEN",
+      "NINETEEN",
+    ];
+    final List<String> tens = [
+      "",
+      "",
+      "TWENTY",
+      "THIRTY",
+      "FORTY",
+      "FIFTY",
+      "SIXTY",
+      "SEVENTY",
+      "EIGHTY",
+      "NINETY",
+    ];
+
+    String convertLessThanOneThousand(int n) {
+      if (n == 0) return "";
+      if (n < 20) return units[n];
+      if (n < 100)
+        return tens[n ~/ 10] + (n % 10 != 0 ? " " + units[n % 10] : "");
+      return units[n ~/ 100] +
+          " HUNDRED" +
+          (n % 100 != 0 ? " " + convertLessThanOneThousand(n % 100) : "");
+    }
+
+    String result = "";
+    if (number >= 10000000) {
+      result += convertLessThanOneThousand(number ~/ 10000000) + " CRORE ";
+      number %= 10000000;
+    }
+    if (number >= 100000) {
+      result += convertLessThanOneThousand(number ~/ 100000) + " LAKH ";
+      number %= 100000;
+    }
+    if (number >= 1000) {
+      result += convertLessThanOneThousand(number ~/ 1000) + " THOUSAND ";
+      number %= 1000;
+    }
+    if (number > 0) {
+      result += convertLessThanOneThousand(number);
+    }
+    return result.trim();
+  }
+
+  Future<void> _printBillReceipt(
+    String customerName,
+    bool showRateColumn,
+    String dateString,
+    String timeString,
+  ) async {
+    if (globalPrinterName == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Printer not configured! Skipping receipt."),
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      // Convert to Date object
+      DateTime parsedDate;
+      try {
+        parsedDate = DateFormat(
+          "dd-MM-yyyy HH:mm:ss",
+        ).parse("$dateString $timeString");
+      } catch (e) {
+        parsedDate = DateTime.now();
+      }
+      final displayDate = DateFormat('dd-MM-yyyy  hh:mm a').format(parsedDate);
+
+      final profile = await CapabilityProfile.load();
+      final generator = Generator(PaperSize.mm80, profile);
+      List<int> bytes = [];
+
+      // Top middle: Shop Name
+      bytes += generator.text(
+        globalShopName.toUpperCase(),
+        styles: const PosStyles(
+          align: PosAlign.center,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+          bold: true,
+        ),
+      );
+
+      // Space between shop name and estimate
+      bytes += generator.text("");
+
+      // ESTIMATE
+      bytes += generator.text(
+        "ESTIMATE",
+        styles: const PosStyles(
+          align: PosAlign.center,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+          bold: true,
+        ),
+      );
+
+      // Set line spacing to very small for the double lines
+      bytes += [27, 51, 5]; // ESC 3 n (5 dots)
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
+      bytes += [27, 50]; // Reset to default line spacing
+
+      // Customer
+      bytes += generator.text(
+        "CUSTOMER : ${customerName.toUpperCase()}",
+        styles: const PosStyles(align: PosAlign.left),
+      );
+
+      // Date & Time
+      bytes += generator.text(
+        "DATE & TIME : $displayDate",
+        styles: const PosStyles(align: PosAlign.left),
+      );
+
+      // One dashed line
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
+
+      // Custom row formatter (48 chars)
+      // Expanded QTY space to fit unit
+      String formatRow(String c1, String c2, String c3, String c4, String c5) {
+        String r1 = c1.padRight(4); // SR (4)
+        String r2 = c2.length > 18
+            ? c2.substring(0, 18)
+            : c2.padRight(18); // NAME (18)
+        String r3 = c3.length > 8
+            ? c3.substring(0, 8)
+            : c3.padRight(8); // QTY (8) -> padRight to align on left edge
+        String r4 = c4.padLeft(8); // RATE (8)
+        String r5 = c5.padLeft(10); // TOTAL (10)
+        return "$r1$r2$r3$r4$r5"; // 48 chars
+      }
+
+      String formatRowNoRate(String c1, String c2, String c3, String c4) {
+        String r1 = c1.padRight(4);
+        String r2 = c2.length > 24
+            ? c2.substring(0, 24)
+            : c2.padRight(24); // NAME (24)
+        String r3 = c3.length > 10
+            ? c3.substring(0, 10)
+            : c3.padRight(10); // QTY (10) -> padRight to align on left edge
+        String r4 = c4.padLeft(10); // TOTAL (10)
+        return "$r1$r2$r3$r4"; // 48 chars
+      }
+
+      // Grid header
+      if (showRateColumn) {
+        bytes += generator.text(
+          formatRow('SR', 'ITEM NAME', 'QTY', 'RATE', 'TOTAL'),
+          styles: const PosStyles(bold: true, align: PosAlign.left),
+        );
+      } else {
+        bytes += generator.text(
+          formatRowNoRate('SR', 'ITEM NAME', 'QTY', 'TOTAL'),
+          styles: const PosStyles(bold: true, align: PosAlign.left),
+        );
+      }
+
+      // Items
+      for (int i = 0; i < _cart.length; i++) {
+        final item = _cart[i];
+        String rawEnglishName = item['name'] ?? "";
+        if (rawEnglishName.contains(" (")) {
+          rawEnglishName = rawEnglishName.split(" (").first;
+        }
+
+        String unit = item['unit'] ?? "";
+        String qtyStr = "${item['qty']} $unit".trim();
+
+        double rateVal = double.tryParse(item['rate'].toString()) ?? 0.0;
+        double totalVal = double.tryParse(item['total'].toString()) ?? 0.0;
+
+        if (showRateColumn) {
+          bytes += generator.text(
+            formatRow(
+              '${i + 1}',
+              rawEnglishName,
+              qtyStr,
+              rateVal.toStringAsFixed(2),
+              totalVal.toStringAsFixed(2),
+            ),
+            styles: const PosStyles(align: PosAlign.left),
+          );
+        } else {
+          bytes += generator.text(
+            formatRowNoRate(
+              '${i + 1}',
+              rawEnglishName,
+              qtyStr,
+              totalVal.toStringAsFixed(2),
+            ),
+            styles: const PosStyles(align: PosAlign.left),
+          );
+        }
+      }
+
+      // One dashed line
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
+
+      double grandTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+
+      // Grand Total
+      bytes += generator.text(
+        "GRAND TOTAL: ${grandTotal.toStringAsFixed(2)}",
+        styles: const PosStyles(
+          bold: true,
+          align: PosAlign.right,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        ),
+      );
+
+      // Spacing
+      bytes += generator.text("");
+
+      // Dashed line
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
+
+      // Amount in Words
+      String words = "Rs. ${_numberToWords(grandTotal.toInt())} ONLY";
+      bytes += generator.text(
+        words,
+        styles: const PosStyles(align: PosAlign.center, bold: true),
+      );
+
+      // Dashed line
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
+
+      // Spacing before footer
+      bytes += generator.text("");
+
+      // Footer
+      bytes += generator.text(
+        "!! THANK YOU , PLEASE VISIT AGAIN !!",
+        styles: const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          height: PosTextSize.size1,
+          width: PosTextSize.size1,
+        ),
+      );
+
+      bytes += generator.text("");
+
+      bytes += generator.text(
+        "SOFTWARE DESIGNED, MADE AND OWNED BY",
+        styles: const PosStyles(align: PosAlign.center),
+      );
+      bytes += generator.text(
+        "MR. SOHAM GURUNATH INDURKAR",
+        styles: const PosStyles(align: PosAlign.center),
+      );
+      bytes += generator.text(
+        "CONTACT :- sohamindurkar12@gmail.com",
+        styles: const PosStyles(align: PosAlign.center),
+      );
+
+      bytes += generator.feed(2);
+      bytes += generator.cut();
+
+      // Print
+      bool isConnected = false;
+      final printerManager = PrinterManager.instance;
+
+      if (Platform.isWindows) {
+        isConnected = await printerManager.connect(
+          type: PrinterType.usb,
+          model: UsbPrinterInput(name: globalPrinterName),
+        );
+      } else {
+        if (globalPrinterType == 1) {
+          // USB
+          isConnected = await printerManager.connect(
+            type: PrinterType.usb,
+            model: UsbPrinterInput(name: globalPrinterName),
+          );
+        } else if (globalPrinterType == 0) {
+          // BT
+          if (globalPrinterAddress != null) {
+            isConnected = await printerManager.connect(
+              type: PrinterType.bluetooth,
+              model: BluetoothPrinterInput(
+                name: globalPrinterName,
+                address: globalPrinterAddress!,
+                isBle: false,
+                autoConnect: false,
+              ),
+            );
+          }
+        } else if (globalPrinterType == 2) {
+          // Network
+          if (globalPrinterAddress != null) {
+            isConnected = await printerManager.connect(
+              type: PrinterType.network,
+              model: TcpPrinterInput(ipAddress: globalPrinterAddress!),
+            );
+          }
+        }
+      }
+
+      if (isConnected) {
+        printerManager.send(
+          type: Platform.isWindows
+              ? PrinterType.usb
+              : (globalPrinterType == 1
+                    ? PrinterType.usb
+                    : (globalPrinterType == 2
+                          ? PrinterType.network
+                          : PrinterType.bluetooth)),
+          bytes: bytes,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Receipt sent to printer!")),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Failed to connect to printer!")),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Print bill exception: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Print Error: $e")));
       }
     }
   }
@@ -3453,7 +3857,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           children: [
             tabRow,
-            Container(height: 1, color: Colors.grey.withOpacity(0.5)),
+            Container(
+              height: 1,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.blueGrey[600]
+                  : Colors.blueGrey[300],
+            ),
             Expanded(child: _buildPartySelectionView()),
           ],
         ),
@@ -3473,7 +3882,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         children: [
           tabRow,
-          Container(height: 1, color: Colors.grey.withOpacity(0.5)),
+          Container(
+            height: 1,
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.blueGrey[600]
+                : Colors.blueGrey[300],
+          ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: Theme.of(context).brightness == Brightness.dark
@@ -4019,6 +4433,9 @@ class _SetupScreenState extends State<SetupScreen> {
             "layout": currentLayoutSetting,
             "shopName": globalShopName,
             "theme": currentThemeSetting,
+            "printerName": globalPrinterName,
+            "printerAddress": globalPrinterAddress,
+            "printerType": globalPrinterType,
           });
           final bytes = Uint8List.fromList(utf8.encode(content));
           File setFile = File("$dir\\app_settings.json");
@@ -4062,6 +4479,9 @@ class _SetupScreenState extends State<SetupScreen> {
             "layout": currentLayoutSetting,
             "shopName": globalShopName,
             "theme": currentThemeSetting,
+            "printerName": globalPrinterName,
+            "printerAddress": globalPrinterAddress,
+            "printerType": globalPrinterType,
           });
           final bytes = Uint8List.fromList(utf8.encode(content));
           if (setFile == null) {
@@ -4157,6 +4577,9 @@ class _SetupScreenState extends State<SetupScreen> {
             currentLayoutSetting = decoded["layout"] ?? "HL";
             globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
             currentThemeSetting = decoded["theme"] ?? "LIGHT";
+            globalPrinterName = decoded["printerName"];
+            globalPrinterAddress = decoded["printerAddress"];
+            globalPrinterType = decoded["printerType"];
             await LocalDatabase.saveAppSettings();
             settingsSuccess = true;
           } else {
@@ -4227,6 +4650,9 @@ class _SetupScreenState extends State<SetupScreen> {
               currentLayoutSetting = decoded["layout"] ?? "HL";
               globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
               currentThemeSetting = decoded["theme"] ?? "LIGHT";
+              globalPrinterName = decoded["printerName"];
+              globalPrinterAddress = decoded["printerAddress"];
+              globalPrinterType = decoded["printerType"];
               await LocalDatabase.saveAppSettings();
               settingsSuccess = true;
             }
@@ -5149,6 +5575,36 @@ class _SetupScreenState extends State<SetupScreen> {
                 child: const Center(
                   child: Text(
                     "APP SETTINGS",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 15),
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const PrinterConfigurationScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.blueGrey[800] : Colors.blueGrey[50],
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.blueGrey[700]!
+                        : Colors.blueGrey.shade200,
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    "PRINTER CONFIGURATION",
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -11286,6 +11742,279 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                 ],
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PrinterConfigurationScreen extends StatefulWidget {
+  const PrinterConfigurationScreen({Key? key}) : super(key: key);
+
+  @override
+  State<PrinterConfigurationScreen> createState() =>
+      _PrinterConfigurationScreenState();
+}
+
+class _PrinterConfigurationScreenState
+    extends State<PrinterConfigurationScreen> {
+  var defaultPrinterType = PrinterType.bluetooth;
+  final PrinterManager _printerManager = PrinterManager.instance;
+  List<PrinterDevice> devices = [];
+  bool _isDiscovering = false;
+
+  void _scanPrinters() {
+    setState(() {
+      devices.clear();
+      _isDiscovering = true;
+    });
+
+    // Scan for all types (Bluetooth, USB, Network)
+    _printerManager.discovery(type: PrinterType.bluetooth).listen((device) {
+      if (!devices.any(
+        (d) =>
+            (d.address != null && d.address == device.address) ||
+            (d.name == device.name),
+      )) {
+        setState(() => devices.add(device));
+      }
+    });
+    _printerManager.discovery(type: PrinterType.usb).listen((device) {
+      if (!devices.any(
+        (d) =>
+            (d.address != null && d.address == device.address) ||
+            (d.name == device.name),
+      )) {
+        setState(() => devices.add(device));
+      }
+    });
+    _printerManager.discovery(type: PrinterType.network).listen((device) {
+      if (!devices.any(
+        (d) =>
+            (d.address != null && d.address == device.address) ||
+            (d.name == device.name),
+      )) {
+        setState(() => devices.add(device));
+      }
+    });
+
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _isDiscovering = false);
+    });
+  }
+
+  Future<void> _connectAndTestPrint(PrinterDevice device) async {
+    bool isConnected = false;
+    try {
+      if (Platform.isWindows) {
+        isConnected = await _printerManager.connect(
+          type: PrinterType.usb,
+          model: UsbPrinterInput(name: device.name),
+        );
+      } else {
+        if (device.vendorId != null) {
+          isConnected = await _printerManager.connect(
+            type: PrinterType.usb,
+            model: UsbPrinterInput(
+              name: device.name,
+              productId: device.productId,
+              vendorId: device.vendorId,
+            ),
+          );
+        } else if (device.address != null) {
+          isConnected = await _printerManager.connect(
+            type: PrinterType.bluetooth,
+            model: BluetoothPrinterInput(
+              name: device.name,
+              address: device.address!,
+              isBle: false,
+              autoConnect: false,
+            ),
+          );
+          if (!isConnected) {
+            isConnected = await _printerManager.connect(
+              type: PrinterType.network,
+              model: TcpPrinterInput(ipAddress: device.address!),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Printer connection exception: $e");
+    }
+
+    if (isConnected) {
+      try {
+        final profile = await CapabilityProfile.load();
+        final generator = Generator(PaperSize.mm58, profile);
+        List<int> bytes = [];
+
+        bytes += generator.text(
+          'HELLO WORLD',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          ),
+          linesAfter: 1,
+        );
+        bytes += generator.cut();
+
+        _printerManager.send(
+          type: Platform.isWindows
+              ? PrinterType.usb
+              : (device.vendorId != null
+                    ? PrinterType.usb
+                    : PrinterType.bluetooth),
+          bytes: bytes,
+        );
+
+        // Save
+        setState(() {
+          globalPrinterName = device.name;
+          globalPrinterAddress = device.address;
+          globalPrinterType = Platform.isWindows
+              ? 1
+              : (device.vendorId != null ? 1 : 0); // 0 BT, 1 USB, 2 Network
+        });
+        await LocalDatabase.saveAppSettings();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Printer Paired Successfully!")),
+          );
+          Navigator.pop(context); // close dialog
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text("Print Failed: $e")));
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to connect to printer")),
+        );
+      }
+    }
+  }
+
+  void _showAddPrinterDialog() {
+    _scanPrinters();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text("Select Printer"),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 400,
+                child: Column(
+                  children: [
+                    if (_isDiscovering) const LinearProgressIndicator(),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: devices.length,
+                        itemBuilder: (context, index) {
+                          final device = devices[index];
+                          return ListTile(
+                            leading: const Icon(Icons.print),
+                            title: Text(device.name ?? "Unknown Printer"),
+                            subtitle: Text(device.address ?? "Unknown Address"),
+                            onTap: () {
+                              _connectAndTestPrint(device);
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("CANCEL"),
+                ),
+                TextButton(
+                  onPressed: () {
+                    _scanPrinters();
+                    setStateDialog(() {});
+                  },
+                  child: const Text("RESCAN"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.blueGrey[800],
+        iconTheme: const IconThemeData(color: Colors.white),
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          "PRINTERS",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            ElevatedButton.icon(
+              onPressed: _showAddPrinterDialog,
+              icon: const Icon(Icons.add),
+              label: const Text("ADD PRINTER"),
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+              ),
+            ),
+            const SizedBox(height: 20),
+            if (globalPrinterName != null)
+              Card(
+                elevation: 4,
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.print,
+                    size: 40,
+                    color: Colors.green,
+                  ),
+                  title: Text(
+                    globalPrinterName!,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    "Address: ${globalPrinterAddress ?? 'N/A'}\nType: ${globalPrinterType == 1 ? 'USB' : (globalPrinterType == 2 ? 'Network' : 'Bluetooth')}",
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () async {
+                      setState(() {
+                        globalPrinterName = null;
+                        globalPrinterAddress = null;
+                        globalPrinterType = null;
+                      });
+                      await LocalDatabase.saveAppSettings();
+                    },
+                  ),
+                ),
+              ),
           ],
         ),
       ),
