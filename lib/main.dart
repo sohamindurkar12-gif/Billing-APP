@@ -180,6 +180,7 @@ List<Map<String, dynamic>> globalParties = [];
 Map<String, String> globalCategoryColors = {};
 String currentLayoutSetting = "HL";
 String globalShopName = "RETAIL INVOICE";
+String globalWhatsappNumber = "";
 String currentThemeSetting = "LIGHT";
 String? globalPrinterName;
 String? globalPrinterAddress;
@@ -548,6 +549,7 @@ class LocalDatabase {
       final content = jsonEncode({
         "layout": currentLayoutSetting,
         "shopName": globalShopName,
+        "whatsappNumber": globalWhatsappNumber,
         "theme": currentThemeSetting,
         "printerName": globalPrinterName,
         "printerAddress": globalPrinterAddress,
@@ -602,6 +604,7 @@ class LocalDatabase {
         Map<String, dynamic> decoded = jsonDecode(content);
         currentLayoutSetting = decoded["layout"] ?? "HL";
         globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
+        globalWhatsappNumber = decoded["whatsappNumber"] ?? "";
         currentThemeSetting = decoded["theme"] ?? "LIGHT";
         globalPrinterName = decoded["printerName"];
         globalPrinterAddress = decoded["printerAddress"];
@@ -1189,6 +1192,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String dateString,
     String timeString, [
     bool addToLedger = false,
+    double hamali = 0.0,
+    double packing = 0.0,
+    double discount = 0.0,
+    bool printAlso = false,
   ]) async {
     if (_cart.isEmpty) return;
     final pdf = pw.Document();
@@ -1211,7 +1218,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .replaceAll(' ', '_');
     final finalFileName = "${timeStampFormat}_$cleanCustomerName";
 
-    double grandTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+    double subTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+    double roundedSubTotal = subTotal.roundToDouble();
+    double grandTotal = roundedSubTotal + packing + hamali - discount;
 
     pdf.addPage(
       pw.MultiPage(
@@ -1223,6 +1232,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 globalShopName.toUpperCase(),
                 style: pw.TextStyle(
                   fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 5),
+            pw.Center(
+              child: pw.Text(
+                globalWhatsappNumber.isEmpty
+                    ? "WHATSAPP NO. :  "
+                    : "WHATSAPP NO. : $globalWhatsappNumber",
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 5),
+            pw.Center(
+              child: pw.Text(
+                "ESTIMATE",
+                style: pw.TextStyle(
+                  fontSize: 16,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
@@ -1318,29 +1349,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   );
                 }),
-                pw.TableRow(
-                  children: [
-                    pw.SizedBox(),
-                    pw.SizedBox(),
-                    if (showRateColumn) pw.SizedBox(),
-                    pw.Container(
-                      alignment: pw.Alignment.centerRight,
-                      padding: const pw.EdgeInsets.all(5),
-                      child: pw.Text(
-                        "GRAND TOTAL: ",
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
-                    ),
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.all(5),
-                      child: pw.Text(
-                        "Rs ${grandTotal.toStringAsFixed(2)}",
-                        style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
               ],
+            ),
+            pw.Container(
+              width: double.infinity,
+              child: pw.Table(
+                border: pw.TableBorder(
+                  left: const pw.BorderSide(),
+                  right: const pw.BorderSide(),
+                  bottom: const pw.BorderSide(),
+                  horizontalInside: const pw.BorderSide(),
+                  top: pw.BorderSide.none,
+                  verticalInside: pw.BorderSide.none,
+                ),
+                columnWidths: showRateColumn
+                    ? {
+                        0: const pw.FlexColumnWidth(),
+                        1: const pw.FixedColumnWidth(110),
+                      }
+                    : {
+                        0: const pw.FlexColumnWidth(),
+                        1: const pw.FixedColumnWidth(145),
+                      },
+                children: [
+                  pw.TableRow(
+                    children: [
+                      pw.Container(
+                        alignment: pw.Alignment.centerRight,
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text("SUB-TOTAL : "),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text(
+                          "Rs ${roundedSubTotal.toStringAsFixed(2)}",
+                        ),
+                      ),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Container(
+                        alignment: pw.Alignment.centerRight,
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text("PACKING : "),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text("Rs ${packing.toStringAsFixed(2)}"),
+                      ),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Container(
+                        alignment: pw.Alignment.centerRight,
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text("HAMALI : "),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text("Rs ${hamali.toStringAsFixed(2)}"),
+                      ),
+                    ],
+                  ),
+                  if (discount > 0)
+                    pw.TableRow(
+                      children: [
+                        pw.Container(
+                          alignment: pw.Alignment.centerRight,
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text("DISCOUNT : "),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text("Rs ${discount.toStringAsFixed(2)}"),
+                        ),
+                      ],
+                    ),
+                  pw.TableRow(
+                    children: [
+                      pw.Container(
+                        alignment: pw.Alignment.centerRight,
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text(
+                          "GRAND TOTAL : ",
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text(
+                          "Rs ${grandTotal.toStringAsFixed(2)}",
+                          style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            pw.Text(
+              "IN WORDS : RS. ${_numberToWords(grandTotal.toInt())} ONLY",
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
             ),
           ];
         },
@@ -1400,6 +1518,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'partyTransactionType': _partyTransactionType,
       'addToLedger': addToLedger,
       'cart': _cart,
+      'hamali': hamali,
+      'packing': packing,
+      'discount': discount,
     };
     // Revert old stock if editing an existing bill
     if (_isEditingBill &&
@@ -1472,12 +1593,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       File jFile = File("$jsonDir\\$finalFileName.json");
       await jFile.writeAsString(jsonString);
 
-      await _printBillReceipt(
-        customerName,
-        showRateColumn,
-        dateString,
-        timeString,
-      );
+      if (printAlso) {
+        await _printBillReceipt(
+          customerName,
+          showRateColumn,
+          dateString,
+          timeString,
+          hamali,
+          packing,
+          discount,
+        );
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1676,8 +1802,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String customerName,
     bool showRateColumn,
     String dateString,
-    String timeString,
-  ) async {
+    String timeString, [
+    double hamali = 0.0,
+    double packing = 0.0,
+    double discount = 0.0,
+  ]) async {
     if (globalPrinterName == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1716,8 +1845,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-      // Space between shop name and estimate
-      bytes += generator.text("");
+      // WhatsApp Number
+      bytes += generator.text(
+        globalWhatsappNumber.isEmpty
+            ? "WHATSAPP NO. :  "
+            : "WHATSAPP NO. : $globalWhatsappNumber",
+        styles: const PosStyles(align: PosAlign.center, bold: true),
+      );
 
       // ESTIMATE
       bytes += generator.text(
@@ -1731,7 +1865,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       // Set line spacing to very small for the double lines
-      bytes += [27, 51, 5]; // ESC 3 n (5 dots)
+      bytes += [27, 51, 2]; // ESC 3 n (2 dots)
       bytes += generator.text(
         '-' * 48,
         styles: const PosStyles(align: PosAlign.left),
@@ -1800,6 +1934,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       }
 
+      // Dashed line under header
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
+
       // Items
       for (int i = 0; i < _cart.length; i++) {
         final item = _cart[i];
@@ -1844,7 +1984,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
         styles: const PosStyles(align: PosAlign.left),
       );
 
-      double grandTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+      double subTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+      double roundedSubTotal = subTotal.roundToDouble();
+      double grandTotal = roundedSubTotal + packing + hamali - discount;
+
+      String rightAlign(String label, String val) {
+        String combined = "$label : $val";
+        return combined.padLeft(48);
+      }
+
+      bytes += generator.text(
+        rightAlign("SUB-TOTAL", roundedSubTotal.toStringAsFixed(2)),
+        styles: const PosStyles(align: PosAlign.right),
+      );
+      bytes += generator.text(
+        rightAlign("PACKING", packing.toStringAsFixed(2)),
+        styles: const PosStyles(align: PosAlign.right),
+      );
+      bytes += generator.text(
+        rightAlign("HAMALI", hamali.toStringAsFixed(2)),
+        styles: const PosStyles(align: PosAlign.right),
+      );
+      if (discount > 0)
+        bytes += generator.text(
+          rightAlign("DISCOUNT", discount.toStringAsFixed(2)),
+          styles: const PosStyles(align: PosAlign.right),
+        );
+
+      bytes += generator.text(
+        '-' * 48,
+        styles: const PosStyles(align: PosAlign.left),
+      );
 
       // Grand Total
       bytes += generator.text(
@@ -1852,8 +2022,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         styles: const PosStyles(
           bold: true,
           align: PosAlign.right,
-          height: PosTextSize.size1,
-          width: PosTextSize.size1,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
         ),
       );
 
@@ -1893,6 +2063,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
+      bytes += generator.text("");
       bytes += generator.text("");
 
       bytes += generator.text(
@@ -1982,6 +2153,202 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ).showSnackBar(SnackBar(content: Text("Print Error: $e")));
       }
     }
+  }
+
+  void _showExtraChargesPopup(
+    String customerName,
+    bool showRateColumn,
+    String dateString,
+    String timeString,
+    bool addToLedger,
+  ) {
+    final TextEditingController hamaliController = TextEditingController();
+    final TextEditingController packingController = TextEditingController();
+    final TextEditingController discountController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  "ENTER HAMALI",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 5),
+                TextField(
+                  controller: hamaliController,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                  ],
+                  textAlign: TextAlign.center,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        children: [
+                          const Text(
+                            "PACKING",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 5),
+                          TextField(
+                            controller: packingController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d*'),
+                              ),
+                            ],
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          const Text(
+                            "DISCOUNT",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 5),
+                          TextField(
+                            controller: discountController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d*'),
+                              ),
+                            ],
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.black,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _showCustomerNamePopup();
+                        },
+                        child: const Text(
+                          "CANCEL",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.black,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _generatePDF(
+                            customerName,
+                            showRateColumn,
+                            dateString,
+                            timeString,
+                            addToLedger,
+                            double.tryParse(hamaliController.text) ?? 0.0,
+                            double.tryParse(packingController.text) ?? 0.0,
+                            double.tryParse(discountController.text) ?? 0.0,
+                            false,
+                          );
+                        },
+                        child: const Text(
+                          "PDF",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.black,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _generatePDF(
+                            customerName,
+                            showRateColumn,
+                            dateString,
+                            timeString,
+                            addToLedger,
+                            double.tryParse(hamaliController.text) ?? 0.0,
+                            double.tryParse(packingController.text) ?? 0.0,
+                            double.tryParse(discountController.text) ?? 0.0,
+                            true,
+                          );
+                        },
+                        child: const Text(
+                          "PRINT",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _showCustomerNamePopup() {
@@ -2185,7 +2552,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         onSubmitted: (val) {
                           if (!isDateValid || !isTimeValid) return;
                           Navigator.pop(context);
-                          _generatePDF(
+                          _showExtraChargesPopup(
                             val.trim().isEmpty ? "CASH" : val.trim(),
                             globalShowRateSetting,
                             dateController.text.trim(),
@@ -2357,43 +2724,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               height: 45,
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      (isNameTyped &&
-                                          isDateValid &&
-                                          isTimeValid)
-                                      ? Colors.green
-                                      : Colors.grey[300],
-                                  foregroundColor: Colors.black,
-                                ),
-                                onPressed:
-                                    !(isNameTyped && isDateValid && isTimeValid)
-                                    ? null
-                                    : () {
-                                        Navigator.pop(context);
-                                        _generatePDF(
-                                          nameController.text.trim(),
-                                          globalShowRateSetting,
-                                          dateController.text.trim(),
-                                          timeController.text.trim(),
-                                          addToLedger,
-                                        );
-                                      },
-                                child: const Text(
-                                  "DONE",
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: SizedBox(
-                              height: 45,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.red,
                                   foregroundColor: Colors.black,
                                 ),
@@ -2417,23 +2747,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor:
-                                      (isDateValid &&
-                                          isTimeValid &&
-                                          !(_isPartySelected &&
-                                              _selectedParty != null))
-                                      ? Colors.blue
+                                      (isNameTyped &&
+                                          isDateValid &&
+                                          isTimeValid)
+                                      ? Colors.green
                                       : Colors.grey[300],
                                   foregroundColor: Colors.black,
                                 ),
                                 onPressed:
-                                    !(isDateValid && isTimeValid) ||
-                                        (_isPartySelected &&
-                                            _selectedParty != null)
+                                    !(isNameTyped && isDateValid && isTimeValid)
                                     ? null
                                     : () {
                                         Navigator.pop(context);
-                                        _generatePDF(
-                                          "CASH",
+                                        _showExtraChargesPopup(
+                                          nameController.text.trim().isEmpty
+                                              ? "CASH"
+                                              : nameController.text.trim(),
                                           globalShowRateSetting,
                                           dateController.text.trim(),
                                           timeController.text.trim(),
@@ -2441,7 +2770,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         );
                                       },
                                 child: const Text(
-                                  "SKIP",
+                                  "NEXT",
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
@@ -5130,10 +5459,14 @@ class _SetupScreenState extends State<SetupScreen> {
 
   void _showAppSettingsMenu() {
     String tempShopName = globalShopName;
+    String tempWhatsappNumber = globalWhatsappNumber;
     String tempTheme = currentThemeSetting;
     String tempLayout = currentLayoutSetting;
     final TextEditingController shopNameController = TextEditingController(
       text: tempShopName,
+    );
+    final TextEditingController whatsappController = TextEditingController(
+      text: tempWhatsappNumber,
     );
 
     void showUnsavedWarning() {
@@ -5226,6 +5559,36 @@ class _SetupScreenState extends State<SetupScreen> {
                         ),
                         onChanged: (val) {
                           tempShopName = val;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+
+                      const Text(
+                        "ENTER WHATSAPP NO. (Will be displayed in BILL)",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      TextField(
+                        controller: whatsappController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        decoration: InputDecoration(
+                          hintText: "WhatsApp No...",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 15,
+                          ),
+                        ),
+                        onChanged: (val) {
+                          tempWhatsappNumber = val;
                         },
                       ),
                       const SizedBox(height: 20),
@@ -5372,6 +5735,8 @@ class _SetupScreenState extends State<SetupScreen> {
                               ),
                               onPressed: () {
                                 if (tempShopName != globalShopName ||
+                                    tempWhatsappNumber !=
+                                        globalWhatsappNumber ||
                                     tempTheme != currentThemeSetting ||
                                     tempLayout != currentLayoutSetting) {
                                   showUnsavedWarning();
@@ -5397,6 +5762,8 @@ class _SetupScreenState extends State<SetupScreen> {
                                 globalShopName = entry.isEmpty
                                     ? "RETAIL INVOICE"
                                     : entry.toUpperCase();
+                                globalWhatsappNumber = whatsappController.text
+                                    .trim();
                                 currentThemeSetting = tempTheme;
                                 currentLayoutSetting = tempLayout;
                                 await LocalDatabase.saveAppSettings();
