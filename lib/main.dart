@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
+import 'package:image/image.dart' as img;
 import 'package:flutter_pos_printer_platform_image_3/flutter_pos_printer_platform_image_3.dart';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'dart:typed_data';
@@ -14,11 +16,9 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
 import 'package:window_manager/window_manager.dart';
@@ -1196,6 +1196,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double packing = 0.0,
     double discount = 0.0,
     bool printAlso = false,
+    bool printInRegional = true,
   ]) async {
     if (_cart.isEmpty) return;
     final pdf = pw.Document();
@@ -1602,6 +1603,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           hamali,
           packing,
           discount,
+          printInRegional,
         );
       }
 
@@ -1682,6 +1684,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           hamali,
           packing,
           discount,
+          printInRegional,
         );
       }
 
@@ -1811,6 +1814,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double hamali = 0.0,
     double packing = 0.0,
     double discount = 0.0,
+    bool printInRegional = false,
   ]) async {
     if (globalPrinterName == null) {
       if (mounted) {
@@ -1839,253 +1843,567 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
 
-      // Top middle: Shop Name
-      bytes += generator.text(
-        globalShopName.toUpperCase(),
-        styles: const PosStyles(
-          align: PosAlign.center,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-          bold: true,
-        ),
-      );
-
-      // WhatsApp Number
-      bytes += generator.text(
-        globalWhatsappNumber.isEmpty
-            ? "WHATSAPP NO. :  "
-            : "WHATSAPP NO. : $globalWhatsappNumber",
-        styles: const PosStyles(align: PosAlign.center, bold: true),
-      );
-
-      // ESTIMATE
-      bytes += generator.text(
-        "ESTIMATE",
-        styles: const PosStyles(
-          align: PosAlign.center,
-          height: PosTextSize.size1,
-          width: PosTextSize.size1,
-          bold: true,
-        ),
-      );
-
-      // Set line spacing to very small for the double lines
-      bytes += [27, 51, 2]; // ESC 3 n (2 dots)
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
-      bytes += [27, 50]; // Reset to default line spacing
-
-      // Customer
-      bytes += generator.text(
-        "CUSTOMER : ${customerName.toUpperCase()}",
-        styles: const PosStyles(align: PosAlign.left),
-      );
-
-      // Date & Time
-      bytes += generator.text(
-        "DATE & TIME : $displayDate",
-        styles: const PosStyles(align: PosAlign.left),
-      );
-
-      // One dashed line
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
-
-      // Custom row formatter (48 chars)
-      // Expanded QTY space to fit unit
-      String formatRow(String c1, String c2, String c3, String c4, String c5) {
-        String r1 = c1.padRight(4); // SR (4)
-        String r2 = c2.length > 18
-            ? c2.substring(0, 18)
-            : c2.padRight(18); // NAME (18)
-        String r3 = c3.length > 8
-            ? c3.substring(0, 8)
-            : c3.padRight(8); // QTY (8) -> padRight to align on left edge
-        String r4 = c4.padLeft(8); // RATE (8)
-        String r5 = c5.padLeft(10); // TOTAL (10)
-        return "$r1$r2$r3$r4$r5"; // 48 chars
-      }
-
-      String formatRowNoRate(String c1, String c2, String c3, String c4) {
-        String r1 = c1.padRight(4);
-        String r2 = c2.length > 24
-            ? c2.substring(0, 24)
-            : c2.padRight(24); // NAME (24)
-        String r3 = c3.length > 10
-            ? c3.substring(0, 10)
-            : c3.padRight(10); // QTY (10) -> padRight to align on left edge
-        String r4 = c4.padLeft(10); // TOTAL (10)
-        return "$r1$r2$r3$r4"; // 48 chars
-      }
-
-      // Grid header
-      if (showRateColumn) {
-        bytes += generator.text(
-          formatRow('SR', 'ITEM NAME', 'QTY', 'RATE', 'TOTAL'),
-          styles: const PosStyles(bold: true, align: PosAlign.left),
+      if (printInRegional) {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        canvas.drawRect(
+          Rect.fromLTWH(0, 0, 576, 2000),
+          Paint()..color = const Color(0xFFFFFFFF),
         );
-      } else {
-        bytes += generator.text(
-          formatRowNoRate('SR', 'ITEM NAME', 'QTY', 'TOTAL'),
-          styles: const PosStyles(bold: true, align: PosAlign.left),
-        );
-      }
+        double y = 10;
 
-      // Dashed line under header
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
-
-      // Items
-      for (int i = 0; i < _cart.length; i++) {
-        final item = _cart[i];
-        String rawEnglishName = item['name'] ?? "";
-        if (rawEnglishName.contains(" (")) {
-          rawEnglishName = rawEnglishName.split(" (").first;
+        void drawTextLine(
+          String text,
+          double fontSize, {
+          bool isBold = false,
+          TextAlign align = TextAlign.left,
+          String fontFamily = 'sans-serif',
+          bool addSpacing = true,
+        }) {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: text,
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: fontSize,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                fontFamily: fontFamily,
+              ),
+            ),
+            textDirection: ui.TextDirection.ltr,
+            textAlign: align,
+            maxLines: 1,
+          );
+          painter.layout(maxWidth: 576);
+          double x = 10;
+          if (align == TextAlign.center)
+            x = (576 - painter.width) / 2;
+          else if (align == TextAlign.right)
+            x = 576 - painter.width - 10;
+          painter.paint(canvas, Offset(x, y));
+          y += painter.height + (addSpacing ? 5 : 0);
         }
 
-        String unit = item['unit'] ?? "";
-        String qtyStr = "${item['qty']} $unit".trim();
+        void drawColText(
+          String text,
+          double x,
+          double width,
+          double fontSize, {
+          bool isBold = false,
+          TextAlign align = TextAlign.left,
+          String fontFamily = 'sans-serif',
+        }) {
+          final painter = TextPainter(
+            text: TextSpan(
+              text: text,
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: fontSize,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+                fontFamily: fontFamily,
+              ),
+            ),
+            textDirection: ui.TextDirection.ltr,
+            textAlign: align,
+            maxLines: 1,
+          );
+          painter.layout(maxWidth: width);
+          double drawX = x;
+          if (align == TextAlign.right)
+            drawX = x + width - painter.width;
+          else if (align == TextAlign.center)
+            drawX = x + (width - painter.width) / 2;
+          painter.paint(canvas, Offset(drawX, y));
+        }
 
-        double rateVal = double.tryParse(item['rate'].toString()) ?? 0.0;
-        double totalVal = double.tryParse(item['total'].toString()) ?? 0.0;
+        drawTextLine(
+          globalShopName.toUpperCase(),
+          48,
+          isBold: true,
+          align: TextAlign.center,
+        );
+        drawTextLine(
+          globalWhatsappNumber.isEmpty
+              ? "WHATSAPP NO. :  "
+              : "WHATSAPP NO. : $globalWhatsappNumber",
+          24,
+          isBold: true,
+          align: TextAlign.center,
+        );
+        drawTextLine("ESTIMATE", 24, isBold: true, align: TextAlign.center);
+
+        y += 10;
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+          addSpacing: false,
+        );
+        y += 8;
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+        );
+
+        drawTextLine(
+          "CUSTOMER : ${customerName.toUpperCase()}",
+          24,
+          align: TextAlign.left,
+        );
+        drawTextLine("DATE & TIME : $displayDate", 24, align: TextAlign.left);
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+        );
 
         if (showRateColumn) {
-          bytes += generator.text(
-            formatRow(
-              '${i + 1}',
-              rawEnglishName,
-              qtyStr,
+          drawColText("SR", 0, 48, 24, isBold: true);
+          drawColText("ITEM NAME", 48, 216, 24, isBold: true);
+          drawColText("QTY", 264, 96, 24, isBold: true);
+          drawColText(
+            "RATE",
+            360,
+            96,
+            24,
+            isBold: true,
+            align: TextAlign.right,
+          );
+          drawColText(
+            "TOTAL",
+            456,
+            120,
+            24,
+            isBold: true,
+            align: TextAlign.right,
+          );
+        } else {
+          drawColText("SR", 0, 48, 24, isBold: true);
+          drawColText("ITEM NAME", 48, 288, 24, isBold: true);
+          drawColText("QTY", 336, 120, 24, isBold: true);
+          drawColText(
+            "TOTAL",
+            456,
+            120,
+            24,
+            isBold: true,
+            align: TextAlign.right,
+          );
+        }
+        y += 24 + 10;
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+        );
+
+        for (int i = 0; i < _cart.length; i++) {
+          final item = _cart[i];
+          String baseName = item['name'] ?? "";
+          String regName = item['regional_name'] ?? "";
+          String printName = (printInRegional && regName.trim().isNotEmpty)
+              ? regName
+              : baseName;
+
+          if (printName.contains(" (")) {
+            printName = printName.split(" (").first;
+          }
+
+          String unit = item['unit'] ?? "";
+          String qtyStr = "${item['qty']} $unit".trim();
+          double rateVal = double.tryParse(item['rate'].toString()) ?? 0.0;
+          double totalVal = double.tryParse(item['total'].toString()) ?? 0.0;
+
+          if (showRateColumn) {
+            drawColText('${i + 1}', 0, 48, 24);
+            drawColText(printName, 48, 216, 24);
+            drawColText(qtyStr, 264, 96, 24);
+            drawColText(
               rateVal.toStringAsFixed(2),
+              360,
+              96,
+              24,
+              align: TextAlign.right,
+            );
+            drawColText(
               totalVal.toStringAsFixed(2),
-            ),
-            styles: const PosStyles(align: PosAlign.left),
+              456,
+              120,
+              24,
+              align: TextAlign.right,
+            );
+          } else {
+            drawColText('${i + 1}', 0, 48, 24);
+            drawColText(printName, 48, 288, 24);
+            drawColText(qtyStr, 336, 120, 24);
+            drawColText(
+              totalVal.toStringAsFixed(2),
+              456,
+              120,
+              24,
+              align: TextAlign.right,
+            );
+          }
+          y += 24 + 10;
+        }
+
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+        );
+
+        double subTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+        double roundedSubTotal = subTotal.roundToDouble();
+        double grandTotal = roundedSubTotal + packing + hamali - discount;
+
+        drawTextLine(
+          "SUB-TOTAL : ${roundedSubTotal.toStringAsFixed(2)}",
+          24,
+          align: TextAlign.right,
+        );
+        drawTextLine(
+          "PACKING : ${packing.toStringAsFixed(2)}",
+          24,
+          align: TextAlign.right,
+        );
+        drawTextLine(
+          "HAMALI : ${hamali.toStringAsFixed(2)}",
+          24,
+          align: TextAlign.right,
+        );
+        if (discount > 0)
+          drawTextLine(
+            "DISCOUNT : ${discount.toStringAsFixed(2)}",
+            24,
+            align: TextAlign.right,
+          );
+
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+        );
+        drawTextLine(
+          "GRAND TOTAL: ${grandTotal.toStringAsFixed(2)}",
+          48,
+          isBold: true,
+          align: TextAlign.right,
+        );
+        y += 10;
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+        );
+
+        String words = "Rs. ${_numberToWords(grandTotal.toInt())} ONLY";
+        drawTextLine(words, 24, isBold: true, align: TextAlign.center);
+        drawTextLine(
+          '-' * 48,
+          24,
+          align: TextAlign.left,
+          fontFamily: 'monospace',
+        );
+
+        y += 10;
+        drawTextLine(
+          "!! THANK YOU , PLEASE VISIT AGAIN !!",
+          36,
+          isBold: true,
+          align: TextAlign.center,
+        );
+        y += 30;
+        drawTextLine(
+          "SOFTWARE DESIGNED, MADE AND OWNED BY",
+          24,
+          align: TextAlign.center,
+        );
+        drawTextLine(
+          "MR. SOHAM GURUNATH INDURKAR",
+          24,
+          align: TextAlign.center,
+        );
+        drawTextLine(
+          "CONTACT :- sohamindurkar12@gmail.com",
+          24,
+          align: TextAlign.center,
+        );
+
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(576, y.toInt() + 20);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        final pngBytes = byteData!.buffer.asUint8List();
+
+        final decodedImage = img.decodeImage(pngBytes);
+        if (decodedImage == null) throw Exception("Failed to decode image");
+
+        bytes += generator.imageRaster(decodedImage);
+        bytes += generator.feed(2);
+        bytes += generator.cut();
+      } else {
+        // Top middle: Shop Name
+        bytes += generator.text(
+          globalShopName.toUpperCase(),
+          styles: const PosStyles(
+            align: PosAlign.center,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+            bold: true,
+          ),
+        );
+
+        // WhatsApp Number
+        bytes += generator.text(
+          globalWhatsappNumber.isEmpty
+              ? "WHATSAPP NO. :  "
+              : "WHATSAPP NO. : $globalWhatsappNumber",
+          styles: const PosStyles(align: PosAlign.center, bold: true),
+        );
+
+        // ESTIMATE
+        bytes += generator.text(
+          "ESTIMATE",
+          styles: const PosStyles(
+            align: PosAlign.center,
+            height: PosTextSize.size1,
+            width: PosTextSize.size1,
+            bold: true,
+          ),
+        );
+
+        // Set line spacing to very small for the double lines
+        bytes += [27, 51, 2]; // ESC 3 n (2 dots)
+        bytes += generator.text(
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
+        );
+        bytes += generator.text(
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
+        );
+        bytes += [27, 50]; // Reset to default line spacing
+
+        // Customer
+        bytes += generator.text(
+          "CUSTOMER : ${customerName.toUpperCase()}",
+          styles: const PosStyles(align: PosAlign.left),
+        );
+
+        // Date & Time
+        bytes += generator.text(
+          "DATE & TIME : $displayDate",
+          styles: const PosStyles(align: PosAlign.left),
+        );
+
+        // One dashed line
+        bytes += generator.text(
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
+        );
+
+        // Custom row formatter (48 chars)
+        // Expanded QTY space to fit unit
+        String formatRow(
+          String c1,
+          String c2,
+          String c3,
+          String c4,
+          String c5,
+        ) {
+          String r1 = c1.padRight(4); // SR (4)
+          String r2 = c2.length > 18
+              ? c2.substring(0, 18)
+              : c2.padRight(18); // NAME (18)
+          String r3 = c3.length > 8
+              ? c3.substring(0, 8)
+              : c3.padRight(8); // QTY (8) -> padRight to align on left edge
+          String r4 = c4.padLeft(8); // RATE (8)
+          String r5 = c5.padLeft(10); // TOTAL (10)
+          return "$r1$r2$r3$r4$r5"; // 48 chars
+        }
+
+        String formatRowNoRate(String c1, String c2, String c3, String c4) {
+          String r1 = c1.padRight(4);
+          String r2 = c2.length > 24
+              ? c2.substring(0, 24)
+              : c2.padRight(24); // NAME (24)
+          String r3 = c3.length > 10
+              ? c3.substring(0, 10)
+              : c3.padRight(10); // QTY (10) -> padRight to align on left edge
+          String r4 = c4.padLeft(10); // TOTAL (10)
+          return "$r1$r2$r3$r4"; // 48 chars
+        }
+
+        // Grid header
+        if (showRateColumn) {
+          bytes += generator.text(
+            formatRow('SR', 'ITEM NAME', 'QTY', 'RATE', 'TOTAL'),
+            styles: const PosStyles(bold: true, align: PosAlign.left),
           );
         } else {
           bytes += generator.text(
-            formatRowNoRate(
-              '${i + 1}',
-              rawEnglishName,
-              qtyStr,
-              totalVal.toStringAsFixed(2),
-            ),
-            styles: const PosStyles(align: PosAlign.left),
+            formatRowNoRate('SR', 'ITEM NAME', 'QTY', 'TOTAL'),
+            styles: const PosStyles(bold: true, align: PosAlign.left),
           );
         }
-      }
 
-      // One dashed line
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
-
-      double subTotal = _cart.fold(0, (sum, item) => sum + item['total']);
-      double roundedSubTotal = subTotal.roundToDouble();
-      double grandTotal = roundedSubTotal + packing + hamali - discount;
-
-      String rightAlign(String label, String val) {
-        String combined = "$label : $val";
-        return combined.padLeft(48);
-      }
-
-      bytes += generator.text(
-        rightAlign("SUB-TOTAL", roundedSubTotal.toStringAsFixed(2)),
-        styles: const PosStyles(align: PosAlign.right),
-      );
-      bytes += generator.text(
-        rightAlign("PACKING", packing.toStringAsFixed(2)),
-        styles: const PosStyles(align: PosAlign.right),
-      );
-      bytes += generator.text(
-        rightAlign("HAMALI", hamali.toStringAsFixed(2)),
-        styles: const PosStyles(align: PosAlign.right),
-      );
-      if (discount > 0)
+        // Dashed line under header
         bytes += generator.text(
-          rightAlign("DISCOUNT", discount.toStringAsFixed(2)),
-          styles: const PosStyles(align: PosAlign.right),
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
         );
 
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
+        // Items
+        for (int i = 0; i < _cart.length; i++) {
+          final item = _cart[i];
+          String rawEnglishName = item['name'] ?? "";
+          if (rawEnglishName.contains(" (")) {
+            rawEnglishName = rawEnglishName.split(" (").first;
+          }
 
-      // Grand Total
-      bytes += generator.text(
-        "GRAND TOTAL: ${grandTotal.toStringAsFixed(2)}",
-        styles: const PosStyles(
-          bold: true,
-          align: PosAlign.right,
-          height: PosTextSize.size2,
-          width: PosTextSize.size2,
-        ),
-      );
+          String unit = item['unit'] ?? "";
+          String qtyStr = "${item['qty']} $unit".trim();
 
-      // Spacing
-      bytes += generator.text("");
+          double rateVal = double.tryParse(item['rate'].toString()) ?? 0.0;
+          double totalVal = double.tryParse(item['total'].toString()) ?? 0.0;
 
-      // Dashed line
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
+          if (showRateColumn) {
+            bytes += generator.text(
+              formatRow(
+                '${i + 1}',
+                rawEnglishName,
+                qtyStr,
+                rateVal.toStringAsFixed(2),
+                totalVal.toStringAsFixed(2),
+              ),
+              styles: const PosStyles(align: PosAlign.left),
+            );
+          } else {
+            bytes += generator.text(
+              formatRowNoRate(
+                '${i + 1}',
+                rawEnglishName,
+                qtyStr,
+                totalVal.toStringAsFixed(2),
+              ),
+              styles: const PosStyles(align: PosAlign.left),
+            );
+          }
+        }
 
-      // Amount in Words
-      String words = "Rs. ${_numberToWords(grandTotal.toInt())} ONLY";
-      bytes += generator.text(
-        words,
-        styles: const PosStyles(align: PosAlign.center, bold: true),
-      );
+        // One dashed line
+        bytes += generator.text(
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
+        );
 
-      // Dashed line
-      bytes += generator.text(
-        '-' * 48,
-        styles: const PosStyles(align: PosAlign.left),
-      );
+        double subTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+        double roundedSubTotal = subTotal.roundToDouble();
+        double grandTotal = roundedSubTotal + packing + hamali - discount;
 
-      // Spacing before footer
-      bytes += generator.text("");
+        String rightAlign(String label, String val) {
+          String combined = "$label : $val";
+          return combined.padLeft(48);
+        }
 
-      // Footer
-      bytes += generator.text(
-        "!! THANK YOU , PLEASE VISIT AGAIN !!",
-        styles: const PosStyles(
-          align: PosAlign.center,
-          bold: true,
-          height: PosTextSize.size1,
-          width: PosTextSize.size1,
-        ),
-      );
+        bytes += generator.text(
+          rightAlign("SUB-TOTAL", roundedSubTotal.toStringAsFixed(2)),
+          styles: const PosStyles(align: PosAlign.right),
+        );
+        bytes += generator.text(
+          rightAlign("PACKING", packing.toStringAsFixed(2)),
+          styles: const PosStyles(align: PosAlign.right),
+        );
+        bytes += generator.text(
+          rightAlign("HAMALI", hamali.toStringAsFixed(2)),
+          styles: const PosStyles(align: PosAlign.right),
+        );
+        if (discount > 0)
+          bytes += generator.text(
+            rightAlign("DISCOUNT", discount.toStringAsFixed(2)),
+            styles: const PosStyles(align: PosAlign.right),
+          );
 
-      bytes += generator.text("");
-      bytes += generator.text("");
+        bytes += generator.text(
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
+        );
 
-      bytes += generator.text(
-        "SOFTWARE DESIGNED, MADE AND OWNED BY",
-        styles: const PosStyles(align: PosAlign.center),
-      );
-      bytes += generator.text(
-        "MR. SOHAM GURUNATH INDURKAR",
-        styles: const PosStyles(align: PosAlign.center),
-      );
-      bytes += generator.text(
-        "CONTACT :- sohamindurkar12@gmail.com",
-        styles: const PosStyles(align: PosAlign.center),
-      );
+        // Grand Total
+        bytes += generator.text(
+          "GRAND TOTAL: ${grandTotal.toStringAsFixed(2)}",
+          styles: const PosStyles(
+            bold: true,
+            align: PosAlign.right,
+            height: PosTextSize.size2,
+            width: PosTextSize.size2,
+          ),
+        );
 
-      bytes += generator.feed(2);
-      bytes += generator.cut();
+        // Spacing
+        bytes += generator.text("");
+
+        // Dashed line
+        bytes += generator.text(
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
+        );
+
+        // Amount in Words
+        String words = "Rs. ${_numberToWords(grandTotal.toInt())} ONLY";
+        bytes += generator.text(
+          words,
+          styles: const PosStyles(align: PosAlign.center, bold: true),
+        );
+
+        // Dashed line
+        bytes += generator.text(
+          '-' * 48,
+          styles: const PosStyles(align: PosAlign.left),
+        );
+
+        // Spacing before footer
+        bytes += generator.text("");
+
+        // Footer
+        bytes += generator.text(
+          "!! THANK YOU , PLEASE VISIT AGAIN !!",
+          styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            height: PosTextSize.size1,
+            width: PosTextSize.size1,
+          ),
+        );
+
+        bytes += generator.text("");
+        bytes += generator.text("");
+
+        bytes += generator.text(
+          "SOFTWARE DESIGNED, MADE AND OWNED BY",
+          styles: const PosStyles(align: PosAlign.center),
+        );
+        bytes += generator.text(
+          "MR. SOHAM GURUNATH INDURKAR",
+          styles: const PosStyles(align: PosAlign.center),
+        );
+        bytes += generator.text(
+          "CONTACT :- sohamindurkar12@gmail.com",
+          styles: const PosStyles(align: PosAlign.center),
+        );
+
+        bytes += generator.feed(2);
+        bytes += generator.cut();
+      }
 
       // Print
       bool isConnected = false;
@@ -2170,185 +2488,214 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final TextEditingController hamaliController = TextEditingController();
     final TextEditingController packingController = TextEditingController();
     final TextEditingController discountController = TextEditingController();
+    bool printInRegional = true;
 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(15),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  "ENTER HAMALI",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 5),
-                TextField(
-                  controller: hamaliController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Padding(
+              padding: const EdgeInsets.all(15),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "ENTER HAMALI",
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
-                  ],
-                  textAlign: TextAlign.center,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                  const SizedBox(height: 5),
+                  TextField(
+                    controller: hamaliController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+                    ],
+                    textAlign: TextAlign.center,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        children: [
-                          const Text(
-                            "PACKING",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 5),
-                          TextField(
-                            controller: packingController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          children: [
+                            const Text(
+                              "PACKING",
+                              style: TextStyle(fontWeight: FontWeight.bold),
                             ),
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                RegExp(r'^\d*\.?\d*'),
-                              ),
-                            ],
-                            textAlign: TextAlign.center,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          const Text(
-                            "DISCOUNT",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 5),
-                          TextField(
-                            controller: discountController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            inputFormatters: [
-                              FilteringTextInputFormatter.allow(
-                                RegExp(r'^\d*\.?\d*'),
-                              ),
-                            ],
-                            textAlign: TextAlign.center,
-                            decoration: InputDecoration(
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
+                            const SizedBox(height: 5),
+                            TextField(
+                              controller: packingController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d*'),
+                                ),
+                              ],
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          foregroundColor: Colors.black,
+                          ],
                         ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _showCustomerNamePopup();
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            const Text(
+                              "DISCOUNT",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 5),
+                            TextField(
+                              controller: discountController,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d*'),
+                                ),
+                              ],
+                              textAlign: TextAlign.center,
+                              decoration: InputDecoration(
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        "PRINT IN REGIONAL LANGUAGE",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      Checkbox(
+                        value: printInRegional,
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              printInRegional = val;
+                            });
+                          }
                         },
-                        child: const Text(
-                          "CANCEL",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.black,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showCustomerNamePopup();
+                          },
+                          child: const Text(
+                            "CANCEL",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          foregroundColor: Colors.black,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _generatePDF(
-                            customerName,
-                            showRateColumn,
-                            dateString,
-                            timeString,
-                            addToLedger,
-                            double.tryParse(hamaliController.text) ?? 0.0,
-                            double.tryParse(packingController.text) ?? 0.0,
-                            double.tryParse(discountController.text) ?? 0.0,
-                            false,
-                          );
-                        },
-                        child: const Text(
-                          "PDF",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.black,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _generatePDF(
+                              customerName,
+                              showRateColumn,
+                              dateString,
+                              timeString,
+                              addToLedger,
+                              double.tryParse(hamaliController.text) ?? 0.0,
+                              double.tryParse(packingController.text) ?? 0.0,
+                              double.tryParse(discountController.text) ?? 0.0,
+                              false,
+                            );
+                          },
+                          child: const Text(
+                            "PDF",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.black,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _generatePDF(
-                            customerName,
-                            showRateColumn,
-                            dateString,
-                            timeString,
-                            addToLedger,
-                            double.tryParse(hamaliController.text) ?? 0.0,
-                            double.tryParse(packingController.text) ?? 0.0,
-                            double.tryParse(discountController.text) ?? 0.0,
-                            true,
-                          );
-                        },
-                        child: const Text(
-                          "PRINT",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.black,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _generatePDF(
+                              customerName,
+                              showRateColumn,
+                              dateString,
+                              timeString,
+                              addToLedger,
+                              double.tryParse(hamaliController.text) ?? 0.0,
+                              double.tryParse(packingController.text) ?? 0.0,
+                              double.tryParse(discountController.text) ?? 0.0,
+                              true,
+                              printInRegional,
+                            );
+                          },
+                          child: const Text(
+                            "PRINT",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2837,6 +3184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .replaceAll(RegExp(r'[\r\n]'), ' ')
         .trim();
     String completeDisplayName = baseName;
+    String regionalName = (item['regional_name'] ?? "").trim();
 
     double stockLeft = 0.0;
     for (String cat in globalStock.keys) {
@@ -2920,6 +3268,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               setState(() {
                 var entryData = {
                   'name': completeDisplayName,
+                  'regional_name': regionalName,
                   'qty': localQty,
                   'rate': localRate,
                   'unit': currentUnit,
@@ -4608,7 +4957,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _tempBills.add(TempBill());
       _currentTempBillIndex = _tempBills.length - 1;
 
-      _cart = List<Map<String, dynamic>>.from(jsonBill['cart'] ?? []);
+      _cart = List<Map<String, dynamic>>.from(jsonBill['cart'] ?? []).map((
+        item,
+      ) {
+        Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
+        String engName = newItem['name'] ?? "";
+        String regName = "";
+        for (var itemsList in globalInventory.values) {
+          for (var invItem in itemsList) {
+            if (invItem['name'] == engName) {
+              regName = invItem['regional_name'] ?? "";
+              break;
+            }
+          }
+          if (regName.isNotEmpty) break;
+        }
+        newItem['regional_name'] = regName;
+        return newItem;
+      }).toList();
       _isPartySelected = true;
       _selectedParty = null;
       _editingCustomerName = jsonBill['customerName'];
@@ -8735,6 +9101,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
   bool get _isValid =>
       _englishNameController.text.trim().isNotEmpty &&
+      _regionalNameController.text.trim().isNotEmpty &&
       _r.text.trim().isNotEmpty &&
       _selectedUnit != null;
 
@@ -12296,7 +12663,7 @@ class _PrinterConfigurationScreenState
                           final device = devices[index];
                           return ListTile(
                             leading: const Icon(Icons.print),
-                            title: Text(device.name ?? "Unknown Printer"),
+                            title: Text(device.name),
                             subtitle: Text(device.address ?? "Unknown Address"),
                             onTap: () {
                               _connectAndTestPrint(device);
@@ -12330,7 +12697,6 @@ class _PrinterConfigurationScreenState
 
   @override
   Widget build(BuildContext context) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blueGrey[800],
