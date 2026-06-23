@@ -1673,12 +1673,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         jsonBillsUri = newDir?.uri;
       }
 
-      await _printBillReceipt(
-        customerName,
-        showRateColumn,
-        dateString,
-        timeString,
-      );
+      if (printAlso) {
+        await _printBillReceipt(
+          customerName,
+          showRateColumn,
+          dateString,
+          timeString,
+          hamali,
+          packing,
+          discount,
+        );
+      }
 
       if (jsonBillsUri != null) {
         if (_isEditingBill && _editingOriginalPdfName != null) {
