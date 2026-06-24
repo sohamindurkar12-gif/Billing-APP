@@ -325,24 +325,24 @@ Future<String?> showColorPickerDialog(
                   Expanded(
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueGrey,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: () => Navigator.pop(ctx, selected),
-                      child: Text(isEditing ? "SAVE" : "ADD"),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red[400],
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: () => Navigator.pop(ctx, null),
                       child: const Text("CLOSE"),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueGrey,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      onPressed: () => Navigator.pop(ctx, selected),
+                      child: Text(isEditing ? "SAVE" : "ADD"),
                     ),
                   ),
                 ],
@@ -937,6 +937,13 @@ class TempBill {
   bool editingBillAddToLedger = true;
   List<Map<String, dynamic>>? editingOriginalCart;
   String? editingOriginalPartyTransactionType;
+
+  // Added fields for full bill persistence
+  double? editingHamali;
+  double? editingPacking;
+  double? editingDiscount;
+  bool? editingPrintInRegional;
+  bool? editingShowRateColumn;
 }
 
 class DashboardScreen extends StatefulWidget {
@@ -1006,6 +1013,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _currentTempBill.editingOriginalPartyTransactionType;
   set _editingOriginalPartyTransactionType(String? val) =>
       _currentTempBill.editingOriginalPartyTransactionType = val;
+
+  double? get _editingHamali => _currentTempBill.editingHamali;
+  set _editingHamali(double? val) => _currentTempBill.editingHamali = val;
+
+  double? get _editingPacking => _currentTempBill.editingPacking;
+  set _editingPacking(double? val) => _currentTempBill.editingPacking = val;
+
+  double? get _editingDiscount => _currentTempBill.editingDiscount;
+  set _editingDiscount(double? val) => _currentTempBill.editingDiscount = val;
+
+  bool? get _editingPrintInRegional => _currentTempBill.editingPrintInRegional;
+  set _editingPrintInRegional(bool? val) =>
+      _currentTempBill.editingPrintInRegional = val;
+
+  bool? get _editingShowRateColumn => _currentTempBill.editingShowRateColumn;
+  set _editingShowRateColumn(bool? val) =>
+      _currentTempBill.editingShowRateColumn = val;
 
   // Keyboard shortcut state (Windows only)
   String _keyBuffer = "";
@@ -1204,9 +1228,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Convert to Date object to format filename safely, and fallback to now if parsing fails
     DateTime parsedDate;
     try {
-      parsedDate = DateFormat(
-        "dd-MM-yyyy HH:mm:ss",
-      ).parse("$dateString $timeString");
+      String normalizedDate = dateString
+          .replaceAll('/', '-')
+          .replaceAll('.', '-');
+      if (timeString.toLowerCase().contains("am") ||
+          timeString.toLowerCase().contains("pm")) {
+        parsedDate = DateFormat(
+          "dd-MM-yyyy hh:mm a",
+        ).parse("$normalizedDate $timeString");
+      } else {
+        parsedDate = DateFormat(
+          "dd-MM-yyyy HH:mm:ss",
+        ).parse("$normalizedDate $timeString");
+      }
     } catch (e) {
       parsedDate = DateTime.now();
     }
@@ -1516,12 +1550,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'billId': currentBillId,
       'customerName': customerName,
       'date': dateString,
+      'time': timeString,
       'partyTransactionType': _partyTransactionType,
       'addToLedger': addToLedger,
       'cart': _cart,
       'hamali': hamali,
       'packing': packing,
       'discount': discount,
+      'printInRegional': printInRegional,
+      'showRateColumn': showRateColumn,
     };
     // Revert old stock if editing an existing bill
     if (_isEditingBill &&
@@ -1831,9 +1868,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Convert to Date object
       DateTime parsedDate;
       try {
-        parsedDate = DateFormat(
-          "dd-MM-yyyy HH:mm:ss",
-        ).parse("$dateString $timeString");
+        String normalizedDate = dateString
+            .replaceAll('/', '-')
+            .replaceAll('.', '-');
+        if (timeString.toLowerCase().contains("am") ||
+            timeString.toLowerCase().contains("pm")) {
+          parsedDate = DateFormat(
+            "dd-MM-yyyy hh:mm a",
+          ).parse("$normalizedDate $timeString");
+        } else {
+          parsedDate = DateFormat(
+            "dd-MM-yyyy HH:mm:ss",
+          ).parse("$normalizedDate $timeString");
+        }
       } catch (e) {
         parsedDate = DateTime.now();
       }
@@ -1881,7 +1928,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           else if (align == TextAlign.right)
             x = 576 - painter.width - 10;
           painter.paint(canvas, Offset(x, y));
-          y += painter.height + (addSpacing ? 5 : 0);
+          y += painter.height + (addSpacing ? 2 : 0);
         }
 
         void drawColText(
@@ -1918,7 +1965,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         drawTextLine(
           globalShopName.toUpperCase(),
-          48,
+          44,
           isBold: true,
           align: TextAlign.center,
         );
@@ -1926,50 +1973,53 @@ class _DashboardScreenState extends State<DashboardScreen> {
           globalWhatsappNumber.isEmpty
               ? "WHATSAPP NO. :  "
               : "WHATSAPP NO. : $globalWhatsappNumber",
-          24,
+          22,
           isBold: true,
           align: TextAlign.center,
         );
-        drawTextLine("ESTIMATE", 24, isBold: true, align: TextAlign.center);
+        drawTextLine("ESTIMATE", 22, isBold: true, align: TextAlign.center);
 
-        y += 10;
+        y += 5;
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
           addSpacing: false,
         );
-        y += 8;
+        y += 4;
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
         );
 
         drawTextLine(
           "CUSTOMER : ${customerName.toUpperCase()}",
-          24,
+          22,
           align: TextAlign.left,
         );
-        drawTextLine("DATE & TIME : $displayDate", 24, align: TextAlign.left);
+        drawTextLine("DATE & TIME : $displayDate", 22, align: TextAlign.left);
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
         );
 
         if (showRateColumn) {
-          drawColText("SR", 0, 48, 24, isBold: true);
-          drawColText("ITEM NAME", 48, 216, 24, isBold: true);
-          drawColText("QTY", 264, 96, 24, isBold: true);
+          drawColText("SR", 0, 48, 22, isBold: true);
+          drawColText("ITEM NAME", 48, 216, 22, isBold: true);
+          drawColText("QTY", 264, 96, 22, isBold: true);
           drawColText(
             "RATE",
             360,
             96,
-            24,
+            22,
             isBold: true,
             align: TextAlign.right,
           );
@@ -1977,27 +2027,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "TOTAL",
             456,
             120,
-            24,
+            22,
             isBold: true,
             align: TextAlign.right,
           );
         } else {
-          drawColText("SR", 0, 48, 24, isBold: true);
-          drawColText("ITEM NAME", 48, 288, 24, isBold: true);
-          drawColText("QTY", 336, 120, 24, isBold: true);
+          drawColText("SR", 0, 48, 22, isBold: true);
+          drawColText("ITEM NAME", 48, 288, 22, isBold: true);
+          drawColText("QTY", 336, 120, 22, isBold: true);
           drawColText(
             "TOTAL",
             456,
             120,
-            24,
+            22,
             isBold: true,
             align: TextAlign.right,
           );
         }
-        y += 24 + 10;
+        y += 22 + 4;
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
         );
@@ -2020,41 +2071,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
           double totalVal = double.tryParse(item['total'].toString()) ?? 0.0;
 
           if (showRateColumn) {
-            drawColText('${i + 1}', 0, 48, 24);
-            drawColText(printName, 48, 216, 24);
-            drawColText(qtyStr, 264, 96, 24);
+            drawColText('${i + 1}', 0, 48, 22);
+            drawColText(printName, 48, 216, 22);
+            drawColText(qtyStr, 264, 96, 22);
             drawColText(
               rateVal.toStringAsFixed(2),
               360,
               96,
-              24,
+              22,
               align: TextAlign.right,
             );
             drawColText(
               totalVal.toStringAsFixed(2),
               456,
               120,
-              24,
+              22,
               align: TextAlign.right,
             );
           } else {
-            drawColText('${i + 1}', 0, 48, 24);
-            drawColText(printName, 48, 288, 24);
-            drawColText(qtyStr, 336, 120, 24);
+            drawColText('${i + 1}', 0, 48, 22);
+            drawColText(printName, 48, 288, 22);
+            drawColText(qtyStr, 336, 120, 22);
             drawColText(
               totalVal.toStringAsFixed(2),
               456,
               120,
-              24,
+              22,
               align: TextAlign.right,
             );
           }
-          y += 24 + 10;
+          y += 22 + 4;
         }
 
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
         );
@@ -2065,76 +2117,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         drawTextLine(
           "SUB-TOTAL : ${roundedSubTotal.toStringAsFixed(2)}",
-          24,
+          22,
           align: TextAlign.right,
         );
         drawTextLine(
           "PACKING : ${packing.toStringAsFixed(2)}",
-          24,
+          22,
           align: TextAlign.right,
         );
         drawTextLine(
           "HAMALI : ${hamali.toStringAsFixed(2)}",
-          24,
+          22,
           align: TextAlign.right,
         );
         if (discount > 0)
           drawTextLine(
             "DISCOUNT : ${discount.toStringAsFixed(2)}",
-            24,
+            22,
             align: TextAlign.right,
           );
 
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
         );
         drawTextLine(
           "GRAND TOTAL: ${grandTotal.toStringAsFixed(2)}",
-          48,
+          44,
           isBold: true,
           align: TextAlign.right,
         );
-        y += 10;
+        y += 5;
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
         );
 
         String words = "Rs. ${_numberToWords(grandTotal.toInt())} ONLY";
-        drawTextLine(words, 24, isBold: true, align: TextAlign.center);
+        drawTextLine(words, 22, isBold: true, align: TextAlign.center);
         drawTextLine(
-          '-' * 48,
-          24,
+          '-' * 100,
+          22,
+          isBold: true,
           align: TextAlign.left,
           fontFamily: 'monospace',
         );
 
-        y += 10;
+        y += 5;
         drawTextLine(
           "!! THANK YOU , PLEASE VISIT AGAIN !!",
-          36,
+          22,
           isBold: true,
           align: TextAlign.center,
         );
-        y += 30;
+        y += 60;
         drawTextLine(
           "SOFTWARE DESIGNED, MADE AND OWNED BY",
-          24,
+          22,
           align: TextAlign.center,
         );
         drawTextLine(
           "MR. SOHAM GURUNATH INDURKAR",
-          24,
+          22,
           align: TextAlign.center,
         );
         drawTextLine(
           "CONTACT :- sohamindurkar12@gmail.com",
-          24,
+          22,
           align: TextAlign.center,
         );
 
@@ -2485,10 +2540,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String timeString,
     bool addToLedger,
   ) {
-    final TextEditingController hamaliController = TextEditingController();
-    final TextEditingController packingController = TextEditingController();
-    final TextEditingController discountController = TextEditingController();
-    bool printInRegional = true;
+    final TextEditingController hamaliController = TextEditingController(
+      text: _isEditingBill && _editingHamali != null && _editingHamali != 0.0
+          ? _editingHamali.toString()
+          : "",
+    );
+    final TextEditingController packingController = TextEditingController(
+      text: _isEditingBill && _editingPacking != null && _editingPacking != 0.0
+          ? _editingPacking.toString()
+          : "",
+    );
+    final TextEditingController discountController = TextEditingController(
+      text:
+          _isEditingBill && _editingDiscount != null && _editingDiscount != 0.0
+          ? _editingDiscount.toString()
+          : "",
+    );
+    bool printInRegional = _isEditingBill && _editingPrintInRegional != null
+        ? _editingPrintInRegional!
+        : true;
 
     showDialog(
       context: context,
@@ -2742,7 +2812,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     bool isDateValid = true;
     bool isTimeValid = true;
-    bool globalShowRateSetting = true;
+    bool globalShowRateSetting =
+        _isEditingBill && _editingShowRateColumn != null
+        ? _editingShowRateColumn!
+        : true;
 
     final dateRegex = RegExp(
       r'^(0[1-9]|[12]\d|3[01])[-./](0[1-9]|1[0-2])[-./]\d{4}$',
@@ -4998,6 +5071,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       _editingOriginalPartyTransactionType =
           jsonBill['partyTransactionType'] ?? "SALES";
+
+      _editingHamali = double.tryParse((jsonBill['hamali'] ?? 0.0).toString());
+      _editingPacking = double.tryParse(
+        (jsonBill['packing'] ?? 0.0).toString(),
+      );
+      _editingDiscount = double.tryParse(
+        (jsonBill['discount'] ?? 0.0).toString(),
+      );
+
+      if (jsonBill['printInRegional'] != null) {
+        _editingPrintInRegional = jsonBill['printInRegional'];
+      }
+      if (jsonBill['showRateColumn'] != null) {
+        _editingShowRateColumn = jsonBill['showRateColumn'];
+      }
     });
   }
 }
