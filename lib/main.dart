@@ -176,6 +176,7 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
 // --- GLOBAL DATA ---
 Map<String, List<Map<String, String>>> globalInventory = {};
 Map<String, Map<String, double>> globalStock = {};
+Map<String, Map<String, double>> globalPurchaseRates = {};
 List<Map<String, dynamic>> globalParties = [];
 Map<String, String> globalCategoryColors = {};
 String currentLayoutSetting = "HL";
@@ -653,7 +654,17 @@ class LocalDatabase {
 
   static Future<void> saveStockToDisk() async {
     try {
-      final content = jsonEncode(globalStock);
+      Map<String, dynamic> output = {};
+      for (var cat in globalStock.keys) {
+        output[cat] = {};
+        for (var item in globalStock[cat]!.keys) {
+          output[cat][item] = {
+            'qty': globalStock[cat]![item] ?? 0.0,
+            'rate': globalPurchaseRates[cat]?[item] ?? 0.0,
+          };
+        }
+      }
+      final content = jsonEncode(output);
       if (Platform.isWindows) {
         String dir = _getWindowsSettingsDir();
         if (!Directory(dir).existsSync()) {
@@ -705,12 +716,27 @@ class LocalDatabase {
       if (content != null) {
         Map<String, dynamic> decoded = jsonDecode(content);
         globalStock = {};
+        globalPurchaseRates = {};
         decoded.forEach((catKey, catValue) {
           Map<String, double> catStock = {};
-          (catValue as Map<String, dynamic>).forEach((itemKey, itemValue) {
-            catStock[itemKey] = (itemValue as num).toDouble();
-          });
+          Map<String, double> catRate = {};
+          if (catValue is Map) {
+            catValue.forEach((itemKey, itemValue) {
+              if (itemValue is Map) {
+                catStock[itemKey] =
+                    double.tryParse(itemValue['qty']?.toString() ?? '0') ?? 0.0;
+                catRate[itemKey] =
+                    double.tryParse(itemValue['rate']?.toString() ?? '0') ??
+                    0.0;
+              } else {
+                catStock[itemKey] =
+                    double.tryParse(itemValue.toString()) ?? 0.0;
+                catRate[itemKey] = 0.0;
+              }
+            });
+          }
           globalStock[catKey] = catStock;
+          globalPurchaseRates[catKey] = catRate;
         });
       }
     } catch (e) {
@@ -1293,6 +1319,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
+            pw.SizedBox(height: 5),
+            pw.Center(
+              child: pw.Text(
+                _partyTransactionType,
+                style: pw.TextStyle(
+                  fontSize: 14,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
             pw.SizedBox(height: 30),
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1592,6 +1628,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         rawEnglishName = rawEnglishName.split(" (").first;
       }
       double qty = double.tryParse(item['qty'].toString()) ?? 0.0;
+      double rate = double.tryParse(item['rate'].toString()) ?? 0.0;
 
       for (String cat in globalStock.keys) {
         if (globalStock[cat]!.containsKey(rawEnglishName)) {
@@ -1601,6 +1638,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           } else if (_partyTransactionType == "PURCHASE") {
             globalStock[cat]![rawEnglishName] =
                 globalStock[cat]![rawEnglishName]! + qty;
+            globalPurchaseRates.putIfAbsent(cat, () => {});
+            globalPurchaseRates[cat]![rawEnglishName] = rate;
           }
           break;
         }
@@ -1641,6 +1680,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           packing,
           discount,
           printInRegional,
+          _partyTransactionType,
         );
       }
 
@@ -1722,6 +1762,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           packing,
           discount,
           printInRegional,
+          _partyTransactionType,
         );
       }
 
@@ -1843,6 +1884,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return result.trim();
   }
 
+  Future<void> _printBillDirectly(Map<String, dynamic> jsonBill) async {
+    List<Map<String, dynamic>> originalCart = List.from(_cart);
+    try {
+      _cart.clear();
+      if (jsonBill['cart'] != null) {
+        for (var item in jsonBill['cart']) {
+          _cart.add(Map<String, dynamic>.from(item));
+        }
+      }
+      String customerName = jsonBill['customerName'] ?? "";
+      bool showRateColumn = jsonBill['showRateColumn'] ?? true;
+      String dateString = jsonBill['date'] ?? "";
+      String timeString = jsonBill['time'] ?? "";
+      double hamali =
+          double.tryParse((jsonBill['hamali'] ?? 0.0).toString()) ?? 0.0;
+      double packing =
+          double.tryParse((jsonBill['packing'] ?? 0.0).toString()) ?? 0.0;
+      double discount =
+          double.tryParse((jsonBill['discount'] ?? 0.0).toString()) ?? 0.0;
+      bool printInRegional = jsonBill['printInRegional'] ?? false;
+      String partyTransactionType = jsonBill['partyTransactionType'] ?? "SALES";
+
+      await _printBillReceipt(
+        customerName,
+        showRateColumn,
+        dateString,
+        timeString,
+        hamali,
+        packing,
+        discount,
+        printInRegional,
+        partyTransactionType,
+      );
+    } finally {
+      _cart.clear();
+      _cart.addAll(originalCart);
+      if (mounted) setState(() {});
+    }
+  }
+
   Future<void> _printBillReceipt(
     String customerName,
     bool showRateColumn,
@@ -1852,6 +1933,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     double packing = 0.0,
     double discount = 0.0,
     bool printInRegional = false,
+    String partyTransactionType = "SALES",
   ]) async {
     if (globalPrinterName == null) {
       if (mounted) {
@@ -1978,6 +2060,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           align: TextAlign.center,
         );
         drawTextLine("ESTIMATE", 22, isBold: true, align: TextAlign.center);
+        y += 5;
+        drawTextLine(
+          partyTransactionType,
+          18,
+          isBold: true,
+          align: TextAlign.center,
+        );
 
         y += 5;
         drawTextLine(
@@ -2227,6 +2316,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // ESTIMATE
         bytes += generator.text(
           "ESTIMATE",
+          styles: const PosStyles(
+            align: PosAlign.center,
+            height: PosTextSize.size1,
+            width: PosTextSize.size1,
+            bold: true,
+          ),
+        );
+        bytes += generator.text(
+          partyTransactionType,
           styles: const PosStyles(
             align: PosAlign.center,
             height: PosTextSize.size1,
@@ -3260,9 +3358,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String regionalName = (item['regional_name'] ?? "").trim();
 
     double stockLeft = 0.0;
+    double purchaseRate = 0.0;
     for (String cat in globalStock.keys) {
       if (globalStock[cat]!.containsKey(baseName)) {
         stockLeft = globalStock[cat]![baseName]!;
+        purchaseRate = globalPurchaseRates[cat]?[baseName] ?? 0.0;
         break;
       }
     }
@@ -3602,31 +3702,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 15),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: allowedUnits
-                            .map(
-                              (u) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                child: ChoiceChip(
-                                  label: Text(
-                                    u,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: allowedUnits
+                                .map(
+                                  (u) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ChoiceChip(
+                                      label: Text(
+                                        u,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      selected: currentUnit == u,
+                                      onSelected: (masterUnit == "PCS")
+                                          ? null
+                                          : (v) => setPopupState(
+                                              () => currentUnit = u,
+                                            ),
                                     ),
                                   ),
-                                  selected: currentUnit == u,
-                                  onSelected: (masterUnit == "PCS")
-                                      ? null
-                                      : (v) => setPopupState(
-                                          () => currentUnit = u,
-                                        ),
-                                ),
-                              ),
-                            )
-                            .toList(),
+                                )
+                                .toList(),
+                          ),
+                          Text(
+                            "PURCHASE RATE - ₹${purchaseRate.toStringAsFixed(2)}",
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blueGrey,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 15),
                       GridView.count(
@@ -4995,6 +5105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Navigator.of(context).popUntil((route) => route.isFirst);
                       _loadBillForEditing(jsonBill, originalPdfName);
                     },
+                    onPrintBill: _printBillDirectly,
                   ),
                 ),
               ).then((_) => setState(() {})),
@@ -6486,8 +6597,9 @@ class _SetupScreenState extends State<SetupScreen> {
 class WarehouseScreen extends StatelessWidget {
   final Function(Map<String, dynamic> jsonBill, String originalPdfName)?
   onEditBill;
+  final Function(Map<String, dynamic> jsonBill)? onPrintBill;
 
-  const WarehouseScreen({super.key, this.onEditBill});
+  const WarehouseScreen({super.key, this.onEditBill, this.onPrintBill});
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -6587,7 +6699,10 @@ class WarehouseScreen extends StatelessWidget {
                 onPressed: () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => HistoryScreen(onEditBill: onEditBill),
+                    builder: (context) => HistoryScreen(
+                      onEditBill: onEditBill,
+                      onPrintBill: onPrintBill,
+                    ),
                   ),
                 ),
                 icon: const Icon(Icons.picture_as_pdf),
@@ -7554,8 +7669,9 @@ class _StockItemsScreenState extends State<StockItemsScreen> {
 class HistoryScreen extends StatefulWidget {
   final Function(Map<String, dynamic> jsonBill, String originalPdfName)?
   onEditBill;
+  final Function(Map<String, dynamic> jsonBill)? onPrintBill;
 
-  const HistoryScreen({super.key, this.onEditBill});
+  const HistoryScreen({super.key, this.onEditBill, this.onPrintBill});
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
@@ -7563,6 +7679,105 @@ class HistoryScreen extends StatefulWidget {
 class _HistoryScreenState extends State<HistoryScreen> {
   List<dynamic> _allPdfFiles = [];
   List<dynamic> _filteredPdfFiles = [];
+
+  Future<void> _printBill(dynamic file) async {
+    if (widget.onPrintBill == null) return;
+    String pdfName = file is File
+        ? file.path.split(Platform.pathSeparator).last
+        : (file as saf.DocumentFile).name ?? "";
+    if (pdfName.isEmpty) return;
+
+    String jsonName = pdfName.replaceAll('.pdf', '.json');
+    if (Platform.isWindows) {
+      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\JSON Bills\\$jsonName";
+      File jsonFile = File(jsonPath);
+      if (await jsonFile.exists()) {
+        try {
+          String contents = await jsonFile.readAsString();
+          Map<String, dynamic> jsonBill = jsonDecode(contents);
+          widget.onPrintBill!(jsonBill);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Failed to read JSON bill: $e")),
+            );
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("JSON bill not found for printing.")),
+          );
+        }
+      }
+    } else {
+      final pathUri = await LocalDatabase.getMyBillsFolderUri();
+      if (pathUri != null) {
+        final childDocs = await saf
+            .listFiles(
+              pathUri,
+              columns: [
+                saf.DocumentFileColumn.displayName,
+                saf.DocumentFileColumn.id,
+              ],
+            )
+            .toList();
+        List<Uri> jsonBillFolders = [];
+        for (var doc in childDocs) {
+          if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+            jsonBillFolders.add(doc.uri);
+          }
+        }
+
+        saf.DocumentFile? targetJsonDoc;
+        for (var folderUri in jsonBillFolders) {
+          final jsonDocs = await saf
+              .listFiles(
+                folderUri,
+                columns: [
+                  saf.DocumentFileColumn.displayName,
+                  saf.DocumentFileColumn.id,
+                ],
+              )
+              .toList();
+          for (var doc in jsonDocs) {
+            if (doc.name == jsonName) {
+              targetJsonDoc = doc;
+              break;
+            }
+          }
+          if (targetJsonDoc != null) break;
+        }
+
+        if (targetJsonDoc != null) {
+          try {
+            final bytes = await saf.getDocumentContent(targetJsonDoc.uri);
+            if (bytes != null) {
+              final contents = utf8.decode(bytes);
+              Map<String, dynamic> jsonBill = jsonDecode(contents);
+              widget.onPrintBill!(jsonBill);
+              return;
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text("Failed to read JSON bill: $e")),
+              );
+            }
+            return;
+          }
+        }
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Cannot print this bill. JSON data not found."),
+          ),
+        );
+      }
+    }
+  }
 
   Future<void> _editBill(dynamic file) async {
     if (widget.onEditBill == null) return;
@@ -8484,6 +8699,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                           }
                                         } else if (value == 'edit') {
                                           _editBill(file);
+                                        } else if (value == 'print') {
+                                          _printBill(file);
                                         }
                                       },
                                       itemBuilder: (BuildContext context) =>
@@ -8496,6 +8713,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                               const PopupMenuItem<String>(
                                                 value: 'edit',
                                                 child: Text('EDIT'),
+                                              ),
+                                            if (widget.onPrintBill != null)
+                                              const PopupMenuItem<String>(
+                                                value: 'print',
+                                                child: Text('PRINT'),
                                               ),
                                           ],
                                     ),
@@ -9295,6 +9517,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
       selectedSubUnit = unit;
 
     TextEditingController stockController = TextEditingController();
+    TextEditingController rateController = TextEditingController();
     bool canSave = false;
 
     await showDialog(
@@ -9399,7 +9622,7 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                         textAlign: TextAlign.center,
                         onChanged: (_) => updateSaveButton(),
                         decoration: const InputDecoration(
-                          hintText: "Enter amount",
+                          hintText: "Enter Stock",
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -9414,6 +9637,25 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                         Row(children: [buildUnitBtn("PCS")])
                       else
                         Row(children: [buildUnitBtn(unit)]),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "PLEASE ENTER PURCHASE RATE",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      TextField(
+                        controller: rateController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        decoration: const InputDecoration(
+                          hintText: "Enter Rate",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
                       const SizedBox(height: 25),
                       Row(
                         children: [
@@ -9477,9 +9719,19 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                           widget.categoryName,
                                           () => {},
                                         );
+                                        globalPurchaseRates.putIfAbsent(
+                                          widget.categoryName,
+                                          () => {},
+                                        );
                                         globalStock[widget
                                                 .categoryName]![data['name']!] =
                                             val;
+                                        globalPurchaseRates[widget
+                                                .categoryName]![data['name']!] =
+                                            double.tryParse(
+                                              rateController.text.trim(),
+                                            ) ??
+                                            0.0;
                                         await LocalDatabase.saveStockToDisk();
 
                                         Navigator.pop(ctx);
@@ -10662,6 +10914,177 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     }
   }
 
+  bool _hasUnsavedChanges() {
+    bool isFormChanged = false;
+    double currentAmt = double.tryParse(_amountCtrl.text.trim()) ?? 0.0;
+    String currentDate = _dateCtrl.text.trim();
+
+    var party = globalParties[widget.partyIndex];
+
+    if (_isEditingOpening) {
+      double origAmt =
+          double.tryParse(party['opening_balance']?.toString() ?? "0.0") ?? 0.0;
+      String origDate = party['opening_date'] ?? '';
+      String origType = party['opening_type'] ?? 'PAYMENT';
+      if (currentAmt != origAmt ||
+          currentDate != origDate ||
+          _selectedType != origType) {
+        isFormChanged = true;
+      }
+    } else if (_editingTransaction != null) {
+      double origDebit =
+          double.tryParse(_editingTransaction!['debit']?.toString() ?? "0.0") ??
+          0.0;
+      double origCredit =
+          double.tryParse(
+            _editingTransaction!['credit']?.toString() ?? "0.0",
+          ) ??
+          0.0;
+      String origDate = _editingTransaction!['date'] ?? '';
+      String origType =
+          _editingTransaction!['type'] ??
+          (origDebit > 0 ? 'PAYMENT' : 'RECEIPT');
+      double origAmt = origDebit > 0 ? origDebit : origCredit;
+      if (currentAmt != origAmt ||
+          currentDate != origDate ||
+          _selectedType != origType) {
+        isFormChanged = true;
+      }
+    } else {
+      if (_amountCtrl.text.trim().isNotEmpty ||
+          _dateCtrl.text.trim().isNotEmpty) {
+        isFormChanged = true;
+      }
+    }
+    return isFormChanged;
+  }
+
+  Future<void> _openBillPdf(String billId) async {
+    String? pdfName;
+    if (Platform.isWindows) {
+      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\JSON Bills";
+      Directory jsonDir = Directory(jsonPath);
+      if (jsonDir.existsSync()) {
+        for (var file in jsonDir.listSync()) {
+          if (file is File && file.path.endsWith('.json')) {
+            try {
+              String content = await file.readAsString();
+              Map<String, dynamic> jsonBill = jsonDecode(content);
+              if (jsonBill['billId'] == billId) {
+                pdfName = file.path
+                    .split(Platform.pathSeparator)
+                    .last
+                    .replaceAll('.json', '.pdf');
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+      }
+      if (pdfName != null) {
+        String pdfPath = "$baseDir\\Billing APP\\MYBILLS\\$pdfName";
+        if (await File(pdfPath).exists()) {
+          try {
+            await OpenFilex.open(pdfPath);
+            return;
+          } catch (e) {
+            if (mounted)
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text("Error opening PDF: $e")));
+            return;
+          }
+        }
+      }
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("PDF not found.")));
+    } else {
+      final pathUri = await LocalDatabase.getMyBillsFolderUri();
+      if (pathUri != null) {
+        final childDocs = await saf
+            .listFiles(
+              pathUri,
+              columns: [
+                saf.DocumentFileColumn.displayName,
+                saf.DocumentFileColumn.id,
+              ],
+            )
+            .toList();
+
+        saf.DocumentFile? jsonFolder;
+        for (var doc in childDocs) {
+          if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+            jsonFolder = doc;
+            break;
+          }
+        }
+
+        if (jsonFolder != null) {
+          final jsonDocs = await saf
+              .listFiles(
+                jsonFolder.uri,
+                columns: [
+                  saf.DocumentFileColumn.displayName,
+                  saf.DocumentFileColumn.id,
+                ],
+              )
+              .toList();
+          for (var doc in jsonDocs) {
+            if (doc.name != null && doc.name!.endsWith('.json')) {
+              try {
+                final bytes = await saf.getDocumentContent(doc.uri);
+                if (bytes != null) {
+                  final contentStr = utf8.decode(bytes);
+                  Map<String, dynamic> jsonBill = jsonDecode(contentStr);
+                  if (jsonBill['billId'] == billId) {
+                    pdfName = doc.name!.replaceAll('.json', '.pdf');
+                    break;
+                  }
+                }
+              } catch (e) {}
+            }
+          }
+        }
+
+        if (pdfName != null) {
+          saf.DocumentFile? targetPdf;
+          for (var doc in childDocs) {
+            if (doc.name == pdfName) {
+              targetPdf = doc;
+              break;
+            }
+          }
+          if (targetPdf != null) {
+            try {
+              final bytes = await saf.getDocumentContent(targetPdf.uri);
+              if (bytes != null) {
+                final tempFile = File(
+                  '${Directory.systemTemp.path}/${targetPdf.name}',
+                );
+                await tempFile.writeAsBytes(bytes);
+                await OpenFilex.open(tempFile.path);
+                return;
+              }
+            } catch (e) {
+              if (mounted)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text("Error opening PDF: $e")),
+                );
+              return;
+            }
+          }
+        }
+        if (mounted)
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("PDF not found.")));
+      }
+    }
+  }
+
   Future<bool> _showUnsavedWarning() async {
     bool? result = await showDialog<bool>(
       context: context,
@@ -11624,12 +12047,14 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                         ),
                         onPressed: hasBillId
                             ? () {
-                                setState(() {
-                                  _amountCtrl.clear();
-                                  _dateCtrl.clear();
-                                  _editingTransaction = null;
-                                  _isEditingOpening = false;
-                                });
+                                if (_editingTransaction != null &&
+                                    (_editingTransaction!['billId'] ?? '')
+                                        .toString()
+                                        .isNotEmpty) {
+                                  _openBillPdf(
+                                    _editingTransaction!['billId'].toString(),
+                                  );
+                                }
                               }
                             : (!canSave
                                   ? null
@@ -11716,7 +12141,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                                     }),
                         child: Icon(
                           hasBillId
-                              ? Icons.arrow_back
+                              ? Icons.picture_as_pdf
                               : ((_editingTransaction != null ||
                                         _isEditingOpening)
                                     ? Icons.save
@@ -12292,18 +12717,47 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
                             Expanded(
                               flex: 85,
                               child: GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _editingTransaction = t;
-                                    _isEditingOpening = false;
-                                    _dateCtrl.text = date;
-                                    _amountCtrl.text =
-                                        (debitVal > 0 ? debitVal : creditVal)
-                                            .toStringAsFixed(2);
-                                    _selectedType =
-                                        t['type'] ??
-                                        (debitVal > 0 ? 'PAYMENT' : 'RECEIPT');
-                                  });
+                                onTap: () async {
+                                  if (_editingTransaction == t) {
+                                    if (!((t['billId'] ?? '')
+                                            .toString()
+                                            .isNotEmpty) &&
+                                        _hasUnsavedChanges()) {
+                                      bool discard =
+                                          await _showUnsavedWarning();
+                                      if (!discard) return;
+                                    }
+                                    setState(() {
+                                      _editingTransaction = null;
+                                      _isEditingOpening = false;
+                                      _amountCtrl.clear();
+                                      _dateCtrl.clear();
+                                    });
+                                  } else {
+                                    if (_hasUnsavedChanges() &&
+                                        !(_editingTransaction != null &&
+                                            (_editingTransaction!['billId'] ??
+                                                    '')
+                                                .toString()
+                                                .isNotEmpty)) {
+                                      bool discard =
+                                          await _showUnsavedWarning();
+                                      if (!discard) return;
+                                    }
+                                    setState(() {
+                                      _editingTransaction = t;
+                                      _isEditingOpening = false;
+                                      _dateCtrl.text = date;
+                                      _amountCtrl.text =
+                                          (debitVal > 0 ? debitVal : creditVal)
+                                              .toStringAsFixed(2);
+                                      _selectedType =
+                                          t['type'] ??
+                                          (debitVal > 0
+                                              ? 'PAYMENT'
+                                              : 'RECEIPT');
+                                    });
+                                  }
                                 },
                                 child: Container(
                                   height: 36,
