@@ -19,10 +19,12 @@ import 'package:share_plus/share_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_sign_in_dartio/google_sign_in_dartio.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:screen_retriever/screen_retriever.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 void main() async {
   // Ensures all Flutter components are completely bound and ready before modifying platform UI settings
@@ -187,6 +189,7 @@ String? globalPrinterName;
 String? globalPrinterAddress;
 int? globalPrinterType; // 0: bluetooth, 1: usb, 2: network
 User? currentFirebaseUser;
+bool globalCloudSyncEnabled = false;
 
 // --- COLOR CONSTANTS & PICKER UI ---
 const List<String> presetColors = [
@@ -425,6 +428,7 @@ class LocalDatabase {
           );
         }
       }
+      CloudDatabase.autoSyncData();
     } catch (e) {
       debugPrint("Error saving parties: $e");
     }
@@ -472,6 +476,7 @@ class LocalDatabase {
         String dir = _getWindowsSettingsDir();
         Directory(dir).createSync(recursive: true);
         await File("$dir\\inventory_db.json").writeAsBytes(bytes);
+        CloudDatabase.autoSyncData();
         return;
       }
 
@@ -488,6 +493,7 @@ class LocalDatabase {
       } else {
         await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
+      CloudDatabase.autoSyncData();
     } catch (e) {
       debugPrint("Error auto-saving database: $e");
     }
@@ -555,6 +561,7 @@ class LocalDatabase {
         "printerName": globalPrinterName,
         "printerAddress": globalPrinterAddress,
         "printerType": globalPrinterType,
+        "cloudSync": globalCloudSyncEnabled,
       });
       final bytes = Uint8List.fromList(utf8.encode(content));
 
@@ -562,6 +569,7 @@ class LocalDatabase {
         String dir = _getWindowsSettingsDir();
         Directory(dir).createSync(recursive: true);
         await File("$dir\\app_settings.json").writeAsBytes(bytes);
+        CloudDatabase.autoSyncData();
         return;
       }
 
@@ -578,6 +586,7 @@ class LocalDatabase {
       } else {
         await saf.writeToFileAsBytes(file.uri, bytes: bytes);
       }
+      CloudDatabase.autoSyncData();
     } catch (e) {
       debugPrint("Error saving app configuration: $e");
     }
@@ -610,6 +619,7 @@ class LocalDatabase {
         globalPrinterName = decoded["printerName"];
         globalPrinterAddress = decoded["printerAddress"];
         globalPrinterType = decoded["printerType"];
+        globalCloudSyncEnabled = decoded["cloudSync"] ?? false;
       }
     } catch (e) {
       debugPrint("Error loading app configuration: $e");
@@ -690,6 +700,7 @@ class LocalDatabase {
           );
         }
       }
+      CloudDatabase.autoSyncData();
     } catch (e) {
       debugPrint("Error saving stock: $e");
     }
@@ -871,9 +882,11 @@ class CloudDatabase {
           .collection('data')
           .doc('settings')
           .set({
-            'layout': currentLayoutSetting,
             'shopName': globalShopName,
-            'theme': currentThemeSetting,
+            'whatsappNumber': globalWhatsappNumber,
+            'printerName': globalPrinterName,
+            'printerAddress': globalPrinterAddress,
+            'printerType': globalPrinterType,
             'lastUpdated': FieldValue.serverTimestamp(),
           });
     } catch (e) {
@@ -894,9 +907,11 @@ class CloudDatabase {
           .get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
-        currentLayoutSetting = data['layout'] ?? "HL";
         globalShopName = data['shopName'] ?? "RETAIL INVOICE";
-        currentThemeSetting = data['theme'] ?? "LIGHT";
+        globalWhatsappNumber = data['whatsappNumber'] ?? "";
+        globalPrinterName = data['printerName'];
+        globalPrinterAddress = data['printerAddress'];
+        globalPrinterType = data['printerType'];
         // Also save to local disk
         await LocalDatabase.saveAppSettings();
       }
@@ -924,9 +939,237 @@ class CloudDatabase {
     }
   }
 
+  // Sync stock and purchase rates to Firestore
+  static Future<void> syncStockToCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('stock')
+          .set({
+            'stock': globalStock,
+            'purchaseRates': globalPurchaseRates,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
+    } catch (e) {
+      debugPrint("Error syncing stock to cloud: $e");
+    }
+  }
+
+  // Load stock and purchase rates from Firestore
+  static Future<void> loadStockFromCloud() async {
+    if (currentFirebaseUser == null) return;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      final doc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('stock')
+          .get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data['stock'] != null) {
+          Map<String, dynamic> decodedStock = Map<String, dynamic>.from(
+            data['stock'],
+          );
+          globalStock = decodedStock.map(
+            (key, value) => MapEntry(key, Map<String, double>.from(value)),
+          );
+        }
+        if (data['purchaseRates'] != null) {
+          Map<String, dynamic> decodedRates = Map<String, dynamic>.from(
+            data['purchaseRates'],
+          );
+          globalPurchaseRates = decodedRates.map(
+            (key, value) => MapEntry(key, Map<String, double>.from(value)),
+          );
+        }
+        await LocalDatabase.saveStockToDisk();
+      }
+    } catch (e) {
+      debugPrint("Error loading stock from cloud: $e");
+    }
+  }
+
+  static Future<bool> checkIfCloudHasData() async {
+    if (currentFirebaseUser == null) return false;
+    try {
+      final uid = currentFirebaseUser!.uid;
+      final doc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('inventory')
+          .get();
+      if (doc.exists && doc.data() != null) {
+        Map<String, dynamic> data = doc.data()!;
+        if (data.containsKey('inventory')) {
+          Map<String, dynamic> inv = data['inventory'];
+          if (inv.isNotEmpty) return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Auto Sync Data to Cloud
+  static Future<void> autoSyncData() async {
+    if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
+    bool internet = await hasInternetConnection();
+    if (!internet) return;
+
+    await syncSettingsToCloud();
+    await syncInventoryToCloud();
+    await syncAccountsToCloud();
+    await syncStockToCloud();
+    await syncAllBillsToCloud();
+  }
+
+  // Sync a single bill to Cloud Storage
+  static Future<void> syncBillToCloud(String billId, String jsonString) async {
+    if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
+    bool internet = await hasInternetConnection();
+    if (!internet) return;
+
+    try {
+      final uid = currentFirebaseUser!.uid;
+
+      // Upload JSON
+      await FirebaseStorage.instance
+          .ref('users/$uid/MYBILLS/$billId.json')
+          .putData(
+            Uint8List.fromList(utf8.encode(jsonString)),
+            SettableMetadata(contentType: 'application/json'),
+          );
+    } catch (e) {
+      debugPrint("Error syncing bill to cloud: $e");
+    }
+  }
+
+  static Future<void> syncAllBillsToCloud() async {
+    if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
+    bool internet = await hasInternetConnection();
+    if (!internet) return;
+
+    try {
+      final uid = currentFirebaseUser!.uid;
+
+      if (Platform.isWindows) {
+        String baseDir = File(Platform.resolvedExecutable).parent.path;
+        String jsonPath = "$baseDir\\Billing APP\\MYBILLS";
+        Directory jsonDir = Directory(jsonPath);
+        if (jsonDir.existsSync()) {
+          for (var file in jsonDir.listSync()) {
+            if (file is File && file.path.endsWith('.json')) {
+              String fileName = file.path.split(Platform.pathSeparator).last;
+              String jsonString = await file.readAsString();
+              await FirebaseStorage.instance
+                  .ref('users/$uid/MYBILLS/$fileName')
+                  .putData(
+                    Uint8List.fromList(utf8.encode(jsonString)),
+                    SettableMetadata(contentType: 'application/json'),
+                  );
+            }
+          }
+        }
+      } else {
+        final pathUri = await LocalDatabase.getMyBillsFolderUri();
+        if (pathUri != null) {
+          final childDocs = await saf
+              .listFiles(
+                pathUri,
+                columns: [
+                  saf.DocumentFileColumn.displayName,
+                  saf.DocumentFileColumn.id,
+                ],
+              )
+              .toList();
+          for (var doc in childDocs) {
+            if (doc.name != null && doc.name!.endsWith('.json')) {
+              final bytes = await saf.getDocumentContent(doc.uri);
+              if (bytes != null) {
+                await FirebaseStorage.instance
+                    .ref('users/$uid/MYBILLS/${doc.name}')
+                    .putData(
+                      bytes,
+                      SettableMetadata(contentType: 'application/json'),
+                    );
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error syncing all bills to cloud: $e");
+    }
+  }
+
+  static Future<void> loadBillsFromCloud() async {
+    if (currentFirebaseUser == null) return;
+    bool internet = await hasInternetConnection();
+    if (!internet) return;
+
+    try {
+      final uid = currentFirebaseUser!.uid;
+      final listResult = await FirebaseStorage.instance
+          .ref('users/$uid/MYBILLS/')
+          .listAll();
+
+      for (var item in listResult.items) {
+        if (item.name.endsWith('.json')) {
+          final data = await item.getData();
+          if (data != null) {
+            String jsonString = utf8.decode(data);
+
+            if (Platform.isWindows) {
+              String baseDir = File(Platform.resolvedExecutable).parent.path;
+              String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\${item.name}";
+              Directory(
+                "$baseDir\\Billing APP\\MYBILLS",
+              ).createSync(recursive: true);
+              await File(jsonPath).writeAsString(jsonString);
+            } else {
+              final pathUri = await LocalDatabase.getMyBillsFolderUri();
+              if (pathUri != null) {
+                final jsonDocs = await saf
+                    .listFiles(
+                      pathUri,
+                      columns: [saf.DocumentFileColumn.displayName],
+                    )
+                    .toList();
+                bool exists = jsonDocs.any((d) => d.name == item.name);
+                if (!exists) {
+                  await saf.createFileAsBytes(
+                    pathUri,
+                    mimeType: 'application/json',
+                    displayName: item.name,
+                    bytes: data,
+                  );
+                } else {
+                  // Update existing
+                  saf.DocumentFile target = jsonDocs.firstWhere(
+                    (d) => d.name == item.name,
+                  );
+                  await saf.writeToFileAsBytes(target.uri, bytes: data);
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading bills from cloud: $e");
+    }
+  }
+
   // Load accounts from Firestore for the current user
   static Future<void> loadAccountsFromCloud() async {
-    if (currentFirebaseUser == null) return;
     try {
       final uid = currentFirebaseUser!.uid;
       final doc = await _firestore
@@ -938,9 +1181,15 @@ class CloudDatabase {
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         if (data['parties'] != null) {
-          globalParties = List<Map<String, dynamic>>.from(data['parties']);
-          // Also save to local disk
-          await LocalDatabase.savePartiesToDisk();
+          List<Map<String, dynamic>> cloudParties =
+              List<Map<String, dynamic>>.from(data['parties']);
+          if (cloudParties.isNotEmpty) {
+            globalParties = cloudParties;
+            // Also save to local disk
+            await LocalDatabase.savePartiesToDisk();
+          } else if (globalParties.isNotEmpty) {
+            await syncAccountsToCloud();
+          }
         }
       }
     } catch (e) {
@@ -1063,10 +1312,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _keyDebounceTimer;
   final FocusNode _homeFocusNode = FocusNode();
 
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
   @override
   void initState() {
     super.initState();
     _checkPermissionsAndInit();
+
+    // Listen for internet connection changes to auto-sync data made offline
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) async {
+      if (results.contains(ConnectivityResult.mobile) ||
+          results.contains(ConnectivityResult.wifi) ||
+          results.contains(ConnectivityResult.ethernet)) {
+        if (globalCloudSyncEnabled) {
+          bool internet = await CloudDatabase.hasInternetConnection();
+          if (internet) {
+            await CloudDatabase.autoSyncData();
+          }
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    _homeFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _checkPermissionsAndInit() async {
@@ -1122,7 +1396,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (currentFirebaseUser == null) {
         // Attempt silent sign in if Firebase forgot the session but GoogleSignIn remembers it
         final googleSignIn = GoogleSignIn();
-        final googleUser = await googleSignIn.signInSilently();
+        final googleUser = await googleSignIn.signInSilently().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => null,
+        );
         if (googleUser != null) {
           final googleAuth = await googleUser.authentication;
           final credential = GoogleAuthProvider.credential(
@@ -1136,6 +1413,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (e) {
       debugPrint("Firebase auth error: $e");
+    }
+
+    if (globalCloudSyncEnabled && currentFirebaseUser != null) {
+      bool internet = await CloudDatabase.hasInternetConnection();
+      if (internet) {
+        await CloudDatabase.loadSettingsFromCloud();
+        await CloudDatabase.loadInventoryFromCloud();
+        await CloudDatabase.loadAccountsFromCloud();
+        await CloudDatabase.loadStockFromCloud();
+        await CloudDatabase.loadBillsFromCloud();
+      }
     }
 
     smartBillingAppKey.currentState?.rebuildApp();
@@ -1236,22 +1524,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
         false;
   }
 
-  Future<void> _generatePDF(
-    String customerName,
-    bool showRateColumn,
-    String dateString,
-    String timeString, [
-    bool addToLedger = false,
-    double hamali = 0.0,
-    double packing = 0.0,
-    double discount = 0.0,
-    bool printAlso = false,
-    bool printInRegional = true,
-  ]) async {
-    if (_cart.isEmpty) return;
+  Future<Uint8List> _generatePdfBytesFromJson(
+    Map<String, dynamic> jsonBill,
+  ) async {
     final pdf = pw.Document();
 
-    // Convert to Date object to format filename safely, and fallback to now if parsing fails
+    final customerName = jsonBill['customerName'] ?? "";
+    final dateString = jsonBill['date'] ?? "";
+    final timeString = jsonBill['time'] ?? "";
+    final partyTransactionType = jsonBill['partyTransactionType'] ?? "";
+    final hamali = (jsonBill['hamali'] ?? 0.0).toDouble();
+    final packing = (jsonBill['packing'] ?? 0.0).toDouble();
+    final discount = (jsonBill['discount'] ?? 0.0).toDouble();
+    final showRateColumn = jsonBill['showRateColumn'] ?? true;
+    final printInRegional = jsonBill['printInRegional'] ?? true;
+    final cart = jsonBill['cart'] as List<dynamic>? ?? [];
+    final shopName = jsonBill['shopName'] ?? "";
+    final whatsappNumber = jsonBill['whatsappNumber'] ?? "";
+
     DateTime parsedDate;
     try {
       String normalizedDate = dateString
@@ -1272,14 +1562,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final displayDate = DateFormat('dd-MM-yyyy hh:mm a').format(parsedDate);
-    final timeStampFormat = DateFormat('yyyyMMdd_HHmmss').format(parsedDate);
 
-    final cleanCustomerName = customerName
-        .replaceAll(RegExp(r'[^\w\s\-]'), '')
-        .replaceAll(' ', '_');
-    final finalFileName = "${timeStampFormat}_$cleanCustomerName";
-
-    double subTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+    double subTotal = cart.fold(0.0, (sum, item) {
+      double total = double.tryParse(item['total'].toString()) ?? 0.0;
+      return sum + total;
+    });
     double roundedSubTotal = subTotal.roundToDouble();
     double grandTotal = roundedSubTotal + packing + hamali - discount;
 
@@ -1290,7 +1577,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return [
             pw.Center(
               child: pw.Text(
-                globalShopName.toUpperCase(),
+                shopName.toUpperCase(),
                 style: pw.TextStyle(
                   fontSize: 24,
                   fontWeight: pw.FontWeight.bold,
@@ -1300,9 +1587,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             pw.SizedBox(height: 5),
             pw.Center(
               child: pw.Text(
-                globalWhatsappNumber.isEmpty
+                whatsappNumber.isEmpty
                     ? "WHATSAPP NO. :  "
-                    : "WHATSAPP NO. : $globalWhatsappNumber",
+                    : "WHATSAPP NO. : $whatsappNumber",
                 style: pw.TextStyle(
                   fontSize: 12,
                   fontWeight: pw.FontWeight.bold,
@@ -1322,7 +1609,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             pw.SizedBox(height: 5),
             pw.Center(
               child: pw.Text(
-                _partyTransactionType,
+                partyTransactionType,
                 style: pw.TextStyle(
                   fontSize: 14,
                   fontWeight: pw.FontWeight.bold,
@@ -1386,8 +1673,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ],
                 ),
-                ...List.generate(_cart.length, (index) {
-                  final item = _cart[index];
+                ...List.generate(cart.length, (index) {
+                  final item = cart[index];
                   String rawEnglishName = item['name'] ?? "";
                   if (rawEnglishName.contains(" (")) {
                     rawEnglishName = rawEnglishName.split(" (").first;
@@ -1414,7 +1701,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
                         child: pw.Text(
-                          'Rs ${item['total'].toStringAsFixed(2)}',
+                          'Rs ${double.parse(item['total'].toString()).toStringAsFixed(2)}',
                         ),
                       ),
                     ],
@@ -1536,7 +1823,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
 
+    return await pdf.save();
+  }
+
+  Future<void> _generatePDF(
+    String customerName,
+    bool showRateColumn,
+    String dateString,
+    String timeString, [
+    bool addToLedger = false,
+    double hamali = 0.0,
+    double packing = 0.0,
+    double discount = 0.0,
+    bool printAlso = false,
+    bool printInRegional = true,
+  ]) async {
+    if (_cart.isEmpty) return;
+    final pdf = pw.Document();
+
+    // Convert to Date object to format filename safely, and fallback to now if parsing fails
+    DateTime parsedDate;
+    try {
+      String normalizedDate = dateString
+          .replaceAll('/', '-')
+          .replaceAll('.', '-');
+      if (timeString.toLowerCase().contains("am") ||
+          timeString.toLowerCase().contains("pm")) {
+        parsedDate = DateFormat(
+          "dd-MM-yyyy hh:mm a",
+        ).parse("$normalizedDate $timeString");
+      } else {
+        parsedDate = DateFormat(
+          "dd-MM-yyyy HH:mm:ss",
+        ).parse("$normalizedDate $timeString");
+      }
+    } catch (e) {
+      parsedDate = DateTime.now();
+    }
+
+    final displayDate = DateFormat('dd-MM-yyyy hh:mm a').format(parsedDate);
+    final timeStampFormat = DateFormat('yyyyMMdd_HHmmss').format(parsedDate);
+
+    final cleanCustomerName = customerName
+        .replaceAll(RegExp(r'[^\w\s\-]'), '')
+        .replaceAll(' ', '_');
+    final finalFileName = "${timeStampFormat}_$cleanCustomerName";
+
+    double subTotal = _cart.fold(0, (sum, item) => sum + item['total']);
+    double roundedSubTotal = subTotal.roundToDouble();
+    double grandTotal = roundedSubTotal + packing + hamali - discount;
+
     String currentBillId;
+
     if (_isEditingBill && _editingBillId != null) {
       currentBillId = _editingBillId!;
     } else {
@@ -1593,6 +1931,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }).toList();
 
     Map<String, dynamic> jsonBill = {
+      'shopName': globalShopName,
+      'whatsappNumber': globalWhatsappNumber,
       'billId': currentBillId,
       'customerName': customerName,
       'date': dateString,
@@ -1662,7 +2002,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (Platform.isWindows) {
       String baseDir = File(Platform.resolvedExecutable).parent.path;
       String dir = "$baseDir\\Billing APP\\MYBILLS";
-      String jsonDir = "$dir\\JSON Bills";
+      String jsonDir = dir;
       Directory(dir).createSync(recursive: true);
       Directory(jsonDir).createSync(recursive: true);
 
@@ -1674,8 +2014,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (File(oldJsonPath).existsSync()) File(oldJsonPath).deleteSync();
       }
 
-      File file = File("$dir\\$finalFileName.pdf");
-      await file.writeAsBytes(await pdf.save());
+      CloudDatabase.syncBillToCloud(finalFileName, jsonString);
 
       File jFile = File("$jsonDir\\$finalFileName.json");
       await jFile.writeAsString(jsonString);
@@ -1698,7 +2037,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              "${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf",
+              "${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.json",
             ),
           ),
         );
@@ -1734,33 +2073,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
 
-      await saf.createFileAsBytes(
-        pathUri,
-        mimeType: 'application/pdf',
-        displayName: "$finalFileName.pdf",
-        bytes: await pdf.save(),
-      );
+      CloudDatabase.syncBillToCloud(finalFileName, jsonString);
 
-      Uri? jsonBillsUri;
-      final childDocs = await saf
-          .listFiles(
-            pathUri,
-            columns: [
-              saf.DocumentFileColumn.displayName,
-              saf.DocumentFileColumn.id,
-            ],
-          )
-          .toList();
-      for (var doc in childDocs) {
-        if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
-          jsonBillsUri = doc.uri;
-          break;
-        }
-      }
-      if (jsonBillsUri == null) {
-        final newDir = await saf.createDirectory(pathUri, "JSON Bills");
-        jsonBillsUri = newDir?.uri;
-      }
+      Uri? jsonBillsUri = pathUri;
 
       if (printAlso) {
         await _printBillReceipt(
@@ -1810,7 +2125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              "${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.pdf",
+              "${_isEditingBill ? 'Updated' : 'Saved'} as $finalFileName.json",
             ),
           ),
         );
@@ -4660,7 +4975,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     onTap: () {
                       setState(() {
-                        _selectedParty = party;
+                        _selectedParty = globalParties[party['originalIndex']];
                         _isPartySelected = true;
                       });
                     },
@@ -5134,7 +5449,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Navigator.of(context).popUntil((route) => route.isFirst);
                       _loadBillForEditing(jsonBill, originalPdfName);
                     },
-                    onPrintBill: _printBillDirectly,
+                    onPrintBill: (jsonBill) => _printBillDirectly(jsonBill),
+                    onGeneratePdf: (jsonBill) =>
+                        _generatePdfBytesFromJson(jsonBill),
                   ),
                 ),
               ).then((_) => setState(() {})),
@@ -5313,7 +5630,9 @@ class _SetupScreenState extends State<SetupScreen> {
       await FirebaseAuth.instance.signOut();
       setState(() {
         currentFirebaseUser = null;
+        globalCloudSyncEnabled = false;
       });
+      await LocalDatabase.saveAppSettings();
 
       // Reload local data after sign-out
       await LocalDatabase.loadFromDisk();
@@ -5338,308 +5657,42 @@ class _SetupScreenState extends State<SetupScreen> {
     }
   }
 
-  // Internal logic to run an inventory save and return the written File handle (cached locally for sharing)
-  Future<void> _exportAndShareFiles(
-    bool shareInventory,
-    bool shareSettings,
-    bool shareAccounts,
-  ) async {
-    try {
-      List<XFile> filesToShare = [];
-      final tempDir = Directory.systemTemp;
-
-      if (Platform.isWindows) {
-        String baseDir = File(Platform.resolvedExecutable).parent.path;
-        String dir = "$baseDir\\Billing APP\\INVENTORY BACKUPS";
-        Directory(dir).createSync(recursive: true);
-
-        if (shareInventory) {
-          final content = jsonEncode(globalInventory);
-          final bytes = Uint8List.fromList(utf8.encode(content));
-          File invFile = File("$dir\\inventory_data.json");
-          await invFile.writeAsBytes(bytes);
-          filesToShare.add(XFile(invFile.path));
-        }
-
-        if (shareSettings) {
-          final content = jsonEncode({
-            "layout": currentLayoutSetting,
-            "shopName": globalShopName,
-            "theme": currentThemeSetting,
-            "printerName": globalPrinterName,
-            "printerAddress": globalPrinterAddress,
-            "printerType": globalPrinterType,
-          });
-          final bytes = Uint8List.fromList(utf8.encode(content));
-          File setFile = File("$dir\\app_settings.json");
-          await setFile.writeAsBytes(bytes);
-          filesToShare.add(XFile(setFile.path));
-        }
-
-        if (shareAccounts) {
-          final content = jsonEncode(globalParties);
-          final bytes = Uint8List.fromList(utf8.encode(content));
-          File accFile = File("$dir\\party_details.json");
-          await accFile.writeAsBytes(bytes);
-          filesToShare.add(XFile(accFile.path));
-        }
-      } else {
-        final backupUri = await LocalDatabase.getBackupsFolderUri();
-        if (backupUri == null) return;
-
-        if (shareInventory) {
-          var invFile = await saf.child(backupUri, 'inventory_data.json');
-          final content = jsonEncode(globalInventory);
-          final bytes = Uint8List.fromList(utf8.encode(content));
-          if (invFile == null) {
-            await saf.createFileAsBytes(
-              backupUri,
-              mimeType: 'application/json',
-              displayName: 'inventory_data.json',
-              bytes: bytes,
-            );
-          } else {
-            await saf.writeToFileAsBytes(invFile.uri, bytes: bytes);
-          }
-          final tempInv = File("${tempDir.path}/inventory_data.json");
-          await tempInv.writeAsBytes(bytes);
-          filesToShare.add(XFile(tempInv.path));
-        }
-
-        if (shareSettings) {
-          var setFile = await saf.child(backupUri, 'app_settings.json');
-          final content = jsonEncode({
-            "layout": currentLayoutSetting,
-            "shopName": globalShopName,
-            "theme": currentThemeSetting,
-            "printerName": globalPrinterName,
-            "printerAddress": globalPrinterAddress,
-            "printerType": globalPrinterType,
-          });
-          final bytes = Uint8List.fromList(utf8.encode(content));
-          if (setFile == null) {
-            await saf.createFileAsBytes(
-              backupUri,
-              mimeType: 'application/json',
-              displayName: 'app_settings.json',
-              bytes: bytes,
-            );
-          } else {
-            await saf.writeToFileAsBytes(setFile.uri, bytes: bytes);
-          }
-          final tempSet = File("${tempDir.path}/app_settings.json");
-          await tempSet.writeAsBytes(bytes);
-          filesToShare.add(XFile(tempSet.path));
-        }
-
-        if (shareAccounts) {
-          var accFile = await saf.child(backupUri, 'party_details.json');
-          final content = jsonEncode(globalParties);
-          final bytes = Uint8List.fromList(utf8.encode(content));
-          if (accFile == null) {
-            await saf.createFileAsBytes(
-              backupUri,
-              mimeType: 'application/json',
-              displayName: 'party_details.json',
-              bytes: bytes,
-            );
-          } else {
-            await saf.writeToFileAsBytes(accFile.uri, bytes: bytes);
-          }
-          final tempAcc = File("${tempDir.path}/party_details.json");
-          await tempAcc.writeAsBytes(bytes);
-          filesToShare.add(XFile(tempAcc.path));
-        }
-      }
-
-      if (filesToShare.isNotEmpty) {
-        await Share.shareXFiles(filesToShare, text: 'My Billing App Backup');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed to share backup: $e")));
-      }
-    }
-  }
-
-  Future<void> _importLocalBackup(
-    bool importInventory,
-    bool importSettings,
-    bool importAccounts,
-  ) async {
-    try {
-      bool inventorySuccess = false;
-      bool settingsSuccess = false;
-      bool accountsSuccess = false;
-
-      if (Platform.isWindows) {
-        String baseDir = File(Platform.resolvedExecutable).parent.path;
-        String dir = "$baseDir\\Billing APP\\INVENTORY BACKUPS";
-
-        if (importInventory) {
-          File invFile = File("$dir\\inventory_data.json");
-          if (invFile.existsSync()) {
-            final content = await invFile.readAsString();
-            Map<String, dynamic> decoded = jsonDecode(content);
-            Map<String, List<Map<String, String>>> verifiedInventory = {};
-            decoded.forEach((key, value) {
-              verifiedInventory[key] = (value as List)
-                  .map((item) => Map<String, String>.from(item))
-                  .toList();
-            });
-            globalInventory = verifiedInventory;
-            await LocalDatabase.saveToDisk();
-            inventorySuccess = true;
-          } else {
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Inventory backup file not found."),
-                ),
-              );
-          }
-        }
-
-        if (importSettings) {
-          File setFile = File("$dir\\app_settings.json");
-          if (setFile.existsSync()) {
-            final content = await setFile.readAsString();
-            Map<String, dynamic> decoded = jsonDecode(content);
-            currentLayoutSetting = decoded["layout"] ?? "HL";
-            globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
-            currentThemeSetting = decoded["theme"] ?? "LIGHT";
-            globalPrinterName = decoded["printerName"];
-            globalPrinterAddress = decoded["printerAddress"];
-            globalPrinterType = decoded["printerType"];
-            await LocalDatabase.saveAppSettings();
-            settingsSuccess = true;
-          } else {
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("App settings backup file not found."),
-                ),
-              );
-          }
-        }
-
-        if (importAccounts) {
-          File accFile = File("$dir\\party_details.json");
-          if (accFile.existsSync()) {
-            final content = await accFile.readAsString();
-            List decoded = jsonDecode(content);
-            globalParties = List<Map<String, dynamic>>.from(decoded);
-            await LocalDatabase.savePartiesToDisk();
-            accountsSuccess = true;
-          } else {
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Accounts backup file not found."),
-                ),
-              );
-          }
-        }
-      } else {
-        final backupUri = await LocalDatabase.getBackupsFolderUri();
-        if (backupUri == null) return;
-
-        if (importInventory) {
-          var invFile = await saf.child(backupUri, 'inventory_data.json');
-          if (invFile != null) {
-            final bytes = await saf.getDocumentContent(invFile.uri);
-            if (bytes != null) {
-              final content = utf8.decode(bytes);
-              Map<String, dynamic> decoded = jsonDecode(content);
-              Map<String, List<Map<String, String>>> verifiedInventory = {};
-              decoded.forEach((key, value) {
-                verifiedInventory[key] = (value as List)
-                    .map((item) => Map<String, String>.from(item))
-                    .toList();
-              });
-              globalInventory = verifiedInventory;
-              await LocalDatabase.saveToDisk();
-              inventorySuccess = true;
-            }
-          } else {
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Inventory backup file not found."),
-                ),
-              );
-          }
-        }
-
-        if (importSettings) {
-          var setFile = await saf.child(backupUri, 'app_settings.json');
-          if (setFile != null) {
-            final bytes = await saf.getDocumentContent(setFile.uri);
-            if (bytes != null) {
-              final content = utf8.decode(bytes);
-              Map<String, dynamic> decoded = jsonDecode(content);
-              currentLayoutSetting = decoded["layout"] ?? "HL";
-              globalShopName = decoded["shopName"] ?? "RETAIL INVOICE";
-              currentThemeSetting = decoded["theme"] ?? "LIGHT";
-              globalPrinterName = decoded["printerName"];
-              globalPrinterAddress = decoded["printerAddress"];
-              globalPrinterType = decoded["printerType"];
-              await LocalDatabase.saveAppSettings();
-              settingsSuccess = true;
-            }
-          } else {
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("App settings backup file not found."),
-                ),
-              );
-          }
-        }
-
-        if (importAccounts) {
-          var accFile = await saf.child(backupUri, 'party_details.json');
-          if (accFile != null) {
-            final bytes = await saf.getDocumentContent(accFile.uri);
-            if (bytes != null) {
-              final content = utf8.decode(bytes);
-              List decoded = jsonDecode(content);
-              globalParties = List<Map<String, dynamic>>.from(decoded);
-              await LocalDatabase.savePartiesToDisk();
-              accountsSuccess = true;
-            }
-          } else {
-            if (mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Accounts backup file not found."),
-                ),
-              );
-          }
-        }
-      }
-
-      if (inventorySuccess || settingsSuccess || accountsSuccess) {
-        setState(() {});
-        smartBillingAppKey.currentState?.rebuildApp();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Local import complete!"),
-              backgroundColor: Colors.green,
+  Future<bool?> _showSyncConflictPrompt(BuildContext context) async {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext ctx) {
+        return AlertDialog(
+          title: const Text(
+            "Sync Conflict",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            "Cloud data was found, but you also have local data. What would you like to do?",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
             ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Local Backup Import Failed: $e")),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+              ),
+              child: const Text(
+                "Download from Cloud",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("Upload Local Data"),
+            ),
+          ],
         );
-      }
-    }
+      },
+    );
   }
 
   Future<void> _showCenterBackupMenu() async {
@@ -5667,22 +5720,17 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     }
 
-    bool exportInventory = false;
-    bool exportSettings = false;
-    bool exportAccounts = false;
-
     if (!mounted) return;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          bool anySelected =
-              exportInventory || exportSettings || exportAccounts;
+          bool canEnable = (currentFirebaseUser != null) && isVIP;
           return AlertDialog(
             title: const Center(
               child: Text(
-                "BACKUP OPTIONS",
+                "CLOUD SYNC",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -5693,297 +5741,142 @@ class _SetupScreenState extends State<SetupScreen> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Column(
-                      children: [
-                        Checkbox(
-                          value: exportInventory,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: const VisualDensity(
-                            horizontal: 0,
-                            vertical: -4,
-                          ),
-                          onChanged: (val) {
-                            setDialogState(
-                              () => exportInventory = val ?? false,
-                            );
-                          },
-                        ),
-                        const Text("INVENTORY", style: TextStyle(fontSize: 12)),
-                      ],
+                const Center(
+                  child: Text(
+                    "SYNC DATA WITH CLOUD",
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.blueGrey,
                     ),
-                    Column(
-                      children: [
-                        Checkbox(
-                          value: exportSettings,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: const VisualDensity(
-                            horizontal: 0,
-                            vertical: -4,
-                          ),
-                          onChanged: (val) {
-                            setDialogState(() => exportSettings = val ?? false);
-                          },
-                        ),
-                        const Text(
-                          "APP SETTINGS",
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      children: [
-                        Checkbox(
-                          value: exportAccounts,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          visualDensity: const VisualDensity(
-                            horizontal: 0,
-                            vertical: -4,
-                          ),
-                          onChanged: (val) {
-                            setDialogState(() => exportAccounts = val ?? false);
-                          },
-                        ),
-                        const Text("ACCOUNTS", style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Divider(color: Colors.grey, thickness: 0.5),
-                const SizedBox(height: 12),
-                // --- ROW 1: EXPORT SYSTEM (80% / 20%) ---
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 8,
-                      child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          onPressed: (!anySelected || !isVIP)
-                              ? null
-                              : () async {
-                                  if (currentFirebaseUser == null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text("Please sign in first!"),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  final messenger = ScaffoldMessenger.of(
-                                    context,
-                                  );
-                                  Navigator.pop(context);
-
-                                  if (!await CloudDatabase.hasInternetConnection()) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "Failed: No internet connection!",
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                    return;
-                                  }
-
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Exporting to cloud..."),
-                                    ),
-                                  );
-                                  if (exportInventory)
-                                    await CloudDatabase.syncInventoryToCloud();
-                                  if (exportSettings)
-                                    await CloudDatabase.syncSettingsToCloud();
-                                  if (exportAccounts)
-                                    await CloudDatabase.syncAccountsToCloud();
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Export complete!"),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                },
-                          icon: const Icon(Icons.cloud_upload_outlined),
-                          label: const Text(
-                            "EXPORT TO CLOUD",
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            disabledBackgroundColor: Colors.grey[200],
-                            disabledForegroundColor: Colors.grey[500],
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(8),
-                                bottomLeft: Radius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      flex: 2,
-                      child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: !anySelected
-                              ? null
-                              : () {
-                                  Navigator.pop(context);
-                                  _exportAndShareFiles(
-                                    exportInventory,
-                                    exportSettings,
-                                    exportAccounts,
-                                  );
-                                },
-                          style: ElevatedButton.styleFrom(
-                            disabledBackgroundColor: Colors.grey[200],
-                            disabledForegroundColor: Colors.grey[500],
-                            backgroundColor: Colors.blueGrey[100],
-                            foregroundColor: Colors.blueGrey[900],
-                            elevation: 1,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.only(
-                                topRight: Radius.circular(8),
-                                bottomRight: Radius.circular(8),
-                              ),
-                            ),
-                          ),
-                          child: const Icon(Icons.share, size: 20),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                const Divider(color: Colors.grey, thickness: 0.5),
-                const SizedBox(height: 12),
-                // --- ROW 2: IMPORT SYSTEM (80% / 20%) ---
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 8,
-                      child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton.icon(
-                          onPressed: (!anySelected || !isVIP)
-                              ? null
-                              : () async {
-                                  if (currentFirebaseUser == null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text("Please sign in first!"),
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  final messenger = ScaffoldMessenger.of(
-                                    context,
-                                  );
-                                  Navigator.pop(context);
-
-                                  if (!await CloudDatabase.hasInternetConnection()) {
-                                    messenger.showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          "Failed: No internet connection!",
-                                        ),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                    return;
-                                  }
-
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Importing from cloud..."),
-                                    ),
-                                  );
-                                  if (exportInventory)
-                                    await CloudDatabase.loadInventoryFromCloud();
-                                  if (exportSettings) {
-                                    await CloudDatabase.loadSettingsFromCloud();
-                                    smartBillingAppKey.currentState
-                                        ?.rebuildApp();
-                                  }
-                                  if (exportAccounts)
-                                    await CloudDatabase.loadAccountsFromCloud();
-                                  messenger.showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Import complete!"),
-                                      backgroundColor: Colors.green,
-                                    ),
-                                  );
-                                },
-                          icon: const Icon(Icons.cloud_download_outlined),
-                          label: const Text(
-                            "IMPORT FROM CLOUD",
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            disabledBackgroundColor: Colors.grey[200],
-                            disabledForegroundColor: Colors.grey[500],
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(8),
-                                bottomLeft: Radius.circular(8),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 2),
-                    Expanded(
-                      flex: 2,
-                      child: SizedBox(
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: !anySelected
-                              ? null
-                              : () {
-                                  Navigator.pop(context);
-                                  _importLocalBackup(
-                                    exportInventory,
-                                    exportSettings,
-                                    exportAccounts,
-                                  );
-                                },
-                          style: ElevatedButton.styleFrom(
-                            disabledBackgroundColor: Colors.grey[200],
-                            disabledForegroundColor: Colors.grey[500],
-                            backgroundColor: Colors.blueGrey[100],
-                            foregroundColor: Colors.blueGrey[900],
-                            elevation: 1,
-                            shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.only(
-                                topRight: Radius.circular(8),
-                                bottomRight: Radius.circular(8),
-                              ),
-                            ),
-                          ),
-                          child: const Icon(Icons.file_open, size: 20),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 16),
+                Center(
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () async {
+                          if (!canEnable) return;
+
+                          if (!globalCloudSyncEnabled) {
+                            // Turning ON
+                            bool cloudHasData =
+                                await CloudDatabase.checkIfCloudHasData();
+                            bool localHasData =
+                                globalStock.isNotEmpty ||
+                                globalInventory.isNotEmpty;
+
+                            if (cloudHasData && localHasData) {
+                              bool? result = await _showSyncConflictPrompt(
+                                context,
+                              );
+                              if (result == null) return;
+
+                              setDialogState(() {
+                                globalCloudSyncEnabled = true;
+                              });
+
+                              if (result == true) {
+                                // Download from Cloud
+                                await CloudDatabase.loadSettingsFromCloud();
+                                await CloudDatabase.loadInventoryFromCloud();
+                                await CloudDatabase.loadAccountsFromCloud();
+                                await CloudDatabase.loadStockFromCloud();
+                                await CloudDatabase.loadBillsFromCloud();
+                                smartBillingAppKey.currentState?.rebuildApp();
+                                await LocalDatabase.saveAppSettings();
+                              } else {
+                                // Upload local
+                                await LocalDatabase.saveAppSettings();
+                              }
+                            } else if (cloudHasData && !localHasData) {
+                              setDialogState(() {
+                                globalCloudSyncEnabled = true;
+                              });
+                              await CloudDatabase.loadSettingsFromCloud();
+                              await CloudDatabase.loadInventoryFromCloud();
+                              await CloudDatabase.loadAccountsFromCloud();
+                              await CloudDatabase.loadStockFromCloud();
+                              smartBillingAppKey.currentState?.rebuildApp();
+                              await LocalDatabase.saveAppSettings();
+                            } else {
+                              // Cloud empty, upload local
+                              setDialogState(() {
+                                globalCloudSyncEnabled = true;
+                              });
+                              await LocalDatabase.saveAppSettings();
+                            }
+                          } else {
+                            // Turning OFF
+                            setDialogState(() {
+                              globalCloudSyncEnabled = false;
+                            });
+                            await LocalDatabase.saveAppSettings();
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: 80,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: canEnable
+                                ? (globalCloudSyncEnabled
+                                      ? Colors.green
+                                      : Colors.red)
+                                : Colors.grey[400],
+                          ),
+                          child: Stack(
+                            children: [
+                              AnimatedPositioned(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                                top: 4,
+                                bottom: 4,
+                                left: globalCloudSyncEnabled ? 44 : 4,
+                                right: globalCloudSyncEnabled ? 4 : 44,
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      globalCloudSyncEnabled
+                                          ? Icons.check
+                                          : Icons.close,
+                                      size: 20,
+                                      color: canEnable
+                                          ? (globalCloudSyncEnabled
+                                                ? Colors.green
+                                                : Colors.red)
+                                          : Colors.grey[400],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        globalCloudSyncEnabled ? "ON" : "OFF",
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: canEnable
+                              ? (globalCloudSyncEnabled
+                                    ? Colors.green
+                                    : Colors.red)
+                              : Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
                 if (currentFirebaseUser == null) ...[
                   Text(
                     "SIGN-IN TO USE CLOUD SYNC",
@@ -6632,8 +6525,15 @@ class WarehouseScreen extends StatelessWidget {
   final Function(Map<String, dynamic> jsonBill, String originalPdfName)?
   onEditBill;
   final Function(Map<String, dynamic> jsonBill)? onPrintBill;
+  final Future<Uint8List> Function(Map<String, dynamic> jsonBill)?
+  onGeneratePdf;
 
-  const WarehouseScreen({super.key, this.onEditBill, this.onPrintBill});
+  const WarehouseScreen({
+    super.key,
+    this.onEditBill,
+    this.onPrintBill,
+    this.onGeneratePdf,
+  });
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -6709,7 +6609,10 @@ class WarehouseScreen extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () => Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const LedgerScreen()),
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        LedgerScreen(onGeneratePdf: onGeneratePdf),
+                  ),
                 ),
                 icon: const Icon(Icons.account_balance_wallet),
                 label: const Text("ACCOUNTING"),
@@ -6736,6 +6639,7 @@ class WarehouseScreen extends StatelessWidget {
                     builder: (context) => HistoryScreen(
                       onEditBill: onEditBill,
                       onPrintBill: onPrintBill,
+                      onGeneratePdf: onGeneratePdf,
                     ),
                   ),
                 ),
@@ -7704,8 +7608,15 @@ class HistoryScreen extends StatefulWidget {
   final Function(Map<String, dynamic> jsonBill, String originalPdfName)?
   onEditBill;
   final Function(Map<String, dynamic> jsonBill)? onPrintBill;
+  final Future<Uint8List> Function(Map<String, dynamic> jsonBill)?
+  onGeneratePdf;
 
-  const HistoryScreen({super.key, this.onEditBill, this.onPrintBill});
+  const HistoryScreen({
+    super.key,
+    this.onEditBill,
+    this.onPrintBill,
+    this.onGeneratePdf,
+  });
   @override
   State<HistoryScreen> createState() => _HistoryScreenState();
 }
@@ -7724,7 +7635,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     String jsonName = pdfName.replaceAll('.pdf', '.json');
     if (Platform.isWindows) {
       String baseDir = File(Platform.resolvedExecutable).parent.path;
-      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\JSON Bills\\$jsonName";
+      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\$jsonName";
       File jsonFile = File(jsonPath);
       if (await jsonFile.exists()) {
         try {
@@ -7760,6 +7671,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         List<Uri> jsonBillFolders = [];
         for (var doc in childDocs) {
           if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+            // Obsolete
             jsonBillFolders.add(doc.uri);
           }
         }
@@ -7823,7 +7735,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     String jsonName = pdfName.replaceAll('.pdf', '.json');
     if (Platform.isWindows) {
       String baseDir = File(Platform.resolvedExecutable).parent.path;
-      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\JSON Bills\\$jsonName";
+      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\$jsonName";
       File jsonFile = File(jsonPath);
       if (await jsonFile.exists()) {
         try {
@@ -7859,6 +7771,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         List<Uri> jsonBillFolders = [];
         for (var doc in childDocs) {
           if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+            // Obsolete
             jsonBillFolders.add(doc.uri);
           }
         }
@@ -8191,7 +8104,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (myBillsDir.existsSync()) {
         List<File> loadedFiles = myBillsDir
             .listSync()
-            .where((e) => e is File && e.path.endsWith('.pdf'))
+            .where((e) => e is File && e.path.endsWith('.json'))
             .map((e) => e as File)
             .toList();
 
@@ -8220,7 +8133,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       List<saf.DocumentFile> loadedFiles = [];
 
       await for (var doc in stream) {
-        if (doc.name != null && doc.name!.endsWith('.pdf')) {
+        if (doc.name != null && doc.name!.endsWith('.json')) {
           loadedFiles.add(doc);
         }
       }
@@ -8245,7 +8158,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       final rawName = fullPath
           .split(Platform.pathSeparator)
           .last
-          .replaceAll('.pdf', '');
+          .replaceAll('.pdf', '')
+          .replaceAll('.json', '');
       final parts = rawName.split('_');
       if (parts.length >= 3 && parts[0].length == 8 && parts[1].length == 6) {
         String rawDate = parts[0];
@@ -8617,28 +8531,56 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                     child: InkWell(
                                       borderRadius: BorderRadius.circular(16),
                                       onTap: () async {
+                                        if (widget.onGeneratePdf == null)
+                                          return;
                                         try {
+                                          Map<String, dynamic> jsonBill;
+                                          String fileName;
                                           if (file is File) {
-                                            OpenFilex.open(file.path);
+                                            fileName = file.path
+                                                .split(Platform.pathSeparator)
+                                                .last;
+                                            String contents = await file
+                                                .readAsString();
+                                            jsonBill = jsonDecode(contents);
                                           } else {
                                             final safFile =
                                                 file as saf.DocumentFile;
+                                            fileName =
+                                                safFile.name ?? "Unknown.json";
                                             final bytes = await saf
                                                 .getDocumentContent(
                                                   safFile.uri,
                                                 );
-                                            if (bytes != null) {
-                                              final tempFile = File(
-                                                '${Directory.systemTemp.path}/${safFile.name}',
-                                              );
-                                              await tempFile.writeAsBytes(
-                                                bytes,
-                                              );
-                                              OpenFilex.open(tempFile.path);
-                                            }
+                                            if (bytes == null) return;
+                                            String contents = utf8.decode(
+                                              bytes,
+                                            );
+                                            jsonBill = jsonDecode(contents);
                                           }
+
+                                          final pdfBytes = await widget
+                                              .onGeneratePdf!(jsonBill);
+                                          final tempFile = File(
+                                            '${Directory.systemTemp.path}/${fileName.replaceAll('.json', '.pdf')}',
+                                          );
+                                          await tempFile.writeAsBytes(pdfBytes);
+                                          OpenFilex.open(tempFile.path);
                                         } catch (e) {
-                                          debugPrint("Error opening file: $e");
+                                          debugPrint(
+                                            "Error opening JSON file and generating PDF: $e",
+                                          );
+                                          if (mounted) {
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  "Error generating PDF: $e",
+                                                ),
+                                              ),
+                                            );
+                                          }
                                         }
                                       },
                                       child: Padding(
@@ -8702,34 +8644,64 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                       ),
                                       onSelected: (value) async {
                                         if (value == 'share') {
+                                          if (widget.onGeneratePdf == null)
+                                            return;
                                           try {
+                                            Map<String, dynamic> jsonBill;
+                                            String fileName;
                                             if (file is File) {
-                                              Share.shareXFiles([
-                                                XFile(file.path),
-                                              ], text: 'Invoice Sharing');
+                                              fileName = file.path
+                                                  .split(Platform.pathSeparator)
+                                                  .last;
+                                              String contents = await file
+                                                  .readAsString();
+                                              jsonBill = jsonDecode(contents);
                                             } else {
                                               final safFile =
                                                   file as saf.DocumentFile;
+                                              fileName =
+                                                  safFile.name ??
+                                                  "Unknown.json";
                                               final bytes = await saf
                                                   .getDocumentContent(
                                                     safFile.uri,
                                                   );
-                                              if (bytes != null) {
-                                                final tempFile = File(
-                                                  '${Directory.systemTemp.path}/${safFile.name}',
-                                                );
-                                                await tempFile.writeAsBytes(
-                                                  bytes,
-                                                );
-                                                Share.shareXFiles([
-                                                  XFile(tempFile.path),
-                                                ], text: 'Invoice Sharing');
-                                              }
+                                              if (bytes == null) return;
+                                              String contents = utf8.decode(
+                                                bytes,
+                                              );
+                                              jsonBill = jsonDecode(contents);
                                             }
+
+                                            final pdfBytes = await widget
+                                                .onGeneratePdf!(jsonBill);
+                                            final tempFile = File(
+                                              '${Directory.systemTemp.path}/${fileName.replaceAll('.json', '.pdf')}',
+                                            );
+                                            await tempFile.writeAsBytes(
+                                              pdfBytes,
+                                            );
+                                            Share.shareXFiles([
+                                              XFile(
+                                                tempFile.path,
+                                                mimeType: 'application/pdf',
+                                              ),
+                                            ], text: 'Invoice Sharing');
                                           } catch (e) {
                                             debugPrint(
-                                              "Error sharing file: $e",
+                                              "Error generating PDF for sharing: $e",
                                             );
+                                            if (mounted) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                SnackBar(
+                                                  content: Text(
+                                                    "Error sharing PDF: $e",
+                                                  ),
+                                                ),
+                                              );
+                                            }
                                           }
                                         } else if (value == 'edit') {
                                           _editBill(file);
@@ -8872,7 +8844,8 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
       final rawName = fullPath
           .split(Platform.pathSeparator)
           .last
-          .replaceAll('.pdf', '');
+          .replaceAll('.pdf', '')
+          .replaceAll('.json', '');
       final parts = rawName.split('_');
       if (parts.length >= 3 && parts[0].length == 8 && parts[1].length == 6) {
         String rawDate = parts[0];
@@ -9052,7 +9025,10 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                                         try {
                                           if (file is File) {
                                             Share.shareXFiles([
-                                              XFile(file.path),
+                                              XFile(
+                                                file.path,
+                                                mimeType: 'application/pdf',
+                                              ),
                                             ], text: 'Invoice Sharing');
                                           } else {
                                             final safFile =
@@ -9069,7 +9045,10 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
                                                 bytes,
                                               );
                                               Share.shareXFiles([
-                                                XFile(tempFile.path),
+                                                XFile(
+                                                  tempFile.path,
+                                                  mimeType: 'application/pdf',
+                                                ),
                                               ], text: 'Invoice Sharing');
                                             }
                                           }
@@ -10184,7 +10163,9 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
 
 // --- LEDGER SCREEN ---
 class LedgerScreen extends StatefulWidget {
-  const LedgerScreen({super.key});
+  final Future<Uint8List> Function(Map<String, dynamic> jsonBill)?
+  onGeneratePdf;
+  const LedgerScreen({super.key, this.onGeneratePdf});
   @override
   State<LedgerScreen> createState() => _LedgerScreenState();
 }
@@ -10758,6 +10739,8 @@ class _LedgerScreenState extends State<LedgerScreen> {
                                           builder: (context) =>
                                               PartyLedgerScreen(
                                                 partyIndex: globalIndex,
+                                                onGeneratePdf:
+                                                    widget.onGeneratePdf,
                                               ),
                                         ),
                                       ).then((_) => setState(() {}));
@@ -10841,8 +10824,14 @@ class _LedgerScreenState extends State<LedgerScreen> {
 // --- PARTY LEDGER SCREEN ---
 class PartyLedgerScreen extends StatefulWidget {
   final int partyIndex;
+  final Future<Uint8List> Function(Map<String, dynamic> jsonBill)?
+  onGeneratePdf;
 
-  const PartyLedgerScreen({super.key, required this.partyIndex});
+  const PartyLedgerScreen({
+    super.key,
+    required this.partyIndex,
+    this.onGeneratePdf,
+  });
 
   @override
   State<PartyLedgerScreen> createState() => _PartyLedgerScreenState();
@@ -11001,10 +10990,22 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
   }
 
   Future<void> _openBillPdf(String billId) async {
-    String? pdfName;
+    if (widget.onGeneratePdf == null) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("PDF generation not supported from here."),
+          ),
+        );
+      return;
+    }
+
+    Map<String, dynamic>? targetJsonBill;
+    String? jsonFileName;
+
     if (Platform.isWindows) {
       String baseDir = File(Platform.resolvedExecutable).parent.path;
-      String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\JSON Bills";
+      String jsonPath = "$baseDir\\Billing APP\\MYBILLS";
       Directory jsonDir = Directory(jsonPath);
       if (jsonDir.existsSync()) {
         for (var file in jsonDir.listSync()) {
@@ -11013,35 +11014,14 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
               String content = await file.readAsString();
               Map<String, dynamic> jsonBill = jsonDecode(content);
               if (jsonBill['billId'] == billId) {
-                pdfName = file.path
-                    .split(Platform.pathSeparator)
-                    .last
-                    .replaceAll('.json', '.pdf');
+                targetJsonBill = jsonBill;
+                jsonFileName = file.path.split(Platform.pathSeparator).last;
                 break;
               }
             } catch (e) {}
           }
         }
       }
-      if (pdfName != null) {
-        String pdfPath = "$baseDir\\Billing APP\\MYBILLS\\$pdfName";
-        if (await File(pdfPath).exists()) {
-          try {
-            await OpenFilex.open(pdfPath);
-            return;
-          } catch (e) {
-            if (mounted)
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text("Error opening PDF: $e")));
-            return;
-          }
-        }
-      }
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("PDF not found.")));
     } else {
       final pathUri = await LocalDatabase.getMyBillsFolderUri();
       if (pathUri != null) {
@@ -11054,76 +11034,49 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
               ],
             )
             .toList();
-
-        saf.DocumentFile? jsonFolder;
         for (var doc in childDocs) {
-          if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
-            jsonFolder = doc;
-            break;
-          }
-        }
-
-        if (jsonFolder != null) {
-          final jsonDocs = await saf
-              .listFiles(
-                jsonFolder.uri,
-                columns: [
-                  saf.DocumentFileColumn.displayName,
-                  saf.DocumentFileColumn.id,
-                ],
-              )
-              .toList();
-          for (var doc in jsonDocs) {
-            if (doc.name != null && doc.name!.endsWith('.json')) {
-              try {
-                final bytes = await saf.getDocumentContent(doc.uri);
-                if (bytes != null) {
-                  final contentStr = utf8.decode(bytes);
-                  Map<String, dynamic> jsonBill = jsonDecode(contentStr);
-                  if (jsonBill['billId'] == billId) {
-                    pdfName = doc.name!.replaceAll('.json', '.pdf');
-                    break;
-                  }
-                }
-              } catch (e) {}
-            }
-          }
-        }
-
-        if (pdfName != null) {
-          saf.DocumentFile? targetPdf;
-          for (var doc in childDocs) {
-            if (doc.name == pdfName) {
-              targetPdf = doc;
-              break;
-            }
-          }
-          if (targetPdf != null) {
+          if (doc.name != null && doc.name!.endsWith('.json')) {
             try {
-              final bytes = await saf.getDocumentContent(targetPdf.uri);
+              final bytes = await saf.getDocumentContent(doc.uri);
               if (bytes != null) {
-                final tempFile = File(
-                  '${Directory.systemTemp.path}/${targetPdf.name}',
-                );
-                await tempFile.writeAsBytes(bytes);
-                await OpenFilex.open(tempFile.path);
-                return;
+                final contentStr = utf8.decode(bytes);
+                Map<String, dynamic> jsonBill = jsonDecode(contentStr);
+                if (jsonBill['billId'] == billId) {
+                  targetJsonBill = jsonBill;
+                  jsonFileName = doc.name;
+                  break;
+                }
               }
-            } catch (e) {
-              if (mounted)
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Error opening PDF: $e")),
-                );
-              return;
-            }
+            } catch (e) {}
           }
         }
+      }
+    }
+
+    if (targetJsonBill != null && jsonFileName != null) {
+      try {
+        final pdfBytes = await widget.onGeneratePdf!(targetJsonBill);
+        final tempFile = File(
+          '${Directory.systemTemp.path}/${jsonFileName.replaceAll('.json', '.pdf')}',
+        );
+        await tempFile.writeAsBytes(pdfBytes);
+        await OpenFilex.open(tempFile.path);
+        return;
+      } catch (e) {
         if (mounted)
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(const SnackBar(content: Text("PDF not found.")));
+          ).showSnackBar(SnackBar(content: Text("Error generating PDF: $e")));
+        return;
       }
     }
+
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("JSON bill not found for this transaction."),
+        ),
+      );
   }
 
   Future<bool> _showUnsavedWarning() async {
@@ -13298,6 +13251,16 @@ class _PrinterConfigurationScreenState
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            const Text(
+              "ONLY 80mm (3-INCH) THERMAL PRINTER SUPPORTED",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: Colors.blueGrey,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
             ElevatedButton.icon(
               onPressed: _showAddPrinterDialog,
               icon: const Icon(Icons.add),
