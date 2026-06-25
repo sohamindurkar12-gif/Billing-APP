@@ -798,74 +798,112 @@ class CloudDatabase {
     }
   }
 
+  static StreamSubscription? _inventorySub;
+  static StreamSubscription? _settingsSub;
+  static StreamSubscription? _accountsSub;
+  static StreamSubscription? _stockSub;
+
+  static void Function()? onCloudDataUpdated;
+
+  static void cancelAllSubscriptions() {
+    _inventorySub?.cancel();
+    _settingsSub?.cancel();
+    _accountsSub?.cancel();
+    _stockSub?.cancel();
+  }
+
   // Load inventory data from Firestore for the current user
   static Future<void> loadInventoryFromCloud() async {
     if (currentFirebaseUser == null) return;
     try {
       final uid = currentFirebaseUser!.uid;
-      final doc = await _firestore
+      _inventorySub?.cancel();
+      var completer = Completer<void>();
+      bool isFirst = true;
+
+      _inventorySub = _firestore
           .collection('users')
           .doc(uid)
           .collection('data')
           .doc('inventory')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
+          .snapshots()
+          .listen(
+            (doc) async {
+              if (doc.exists && doc.data() != null) {
+                final data = doc.data()!;
 
-        if (data.containsKey('_version') && data['_version'] == 2) {
-          if (data['inventory'] != null) {
-            Map<String, dynamic> decoded = Map<String, dynamic>.from(
-              data['inventory'],
-            );
-            Map<String, List<Map<String, String>>> loadedInventory = {};
-            decoded.forEach((key, value) {
-              loadedInventory[key] = (value as List)
-                  .map((item) => Map<String, String>.from(item))
-                  .toList();
-            });
-            if (data.containsKey('categoryOrder') &&
-                data['categoryOrder'] != null) {
-              List<String> order = List<String>.from(data['categoryOrder']);
-              Map<String, List<Map<String, String>>> orderedInventory = {};
-              for (String cat in order) {
-                if (loadedInventory.containsKey(cat)) {
-                  orderedInventory[cat] = loadedInventory[cat]!;
-                  loadedInventory.remove(cat);
+                if (data.containsKey('_version') && data['_version'] == 2) {
+                  if (data['inventory'] != null) {
+                    Map<String, dynamic> decoded = Map<String, dynamic>.from(
+                      data['inventory'],
+                    );
+                    Map<String, List<Map<String, String>>> loadedInventory = {};
+                    decoded.forEach((key, value) {
+                      loadedInventory[key] = (value as List)
+                          .map((item) => Map<String, String>.from(item))
+                          .toList();
+                    });
+                    if (data.containsKey('categoryOrder') &&
+                        data['categoryOrder'] != null) {
+                      List<String> order = List<String>.from(
+                        data['categoryOrder'],
+                      );
+                      Map<String, List<Map<String, String>>> orderedInventory =
+                          {};
+                      for (String cat in order) {
+                        if (loadedInventory.containsKey(cat)) {
+                          orderedInventory[cat] = loadedInventory[cat]!;
+                          loadedInventory.remove(cat);
+                        }
+                      }
+                      orderedInventory.addAll(loadedInventory);
+                      globalInventory = orderedInventory;
+                    } else {
+                      globalInventory = loadedInventory;
+                    }
+                  }
+                  if (data['categoryColors'] != null) {
+                    Map<String, dynamic> colors = Map<String, dynamic>.from(
+                      data['categoryColors'],
+                    );
+                    globalCategoryColors = colors.map(
+                      (key, value) => MapEntry(key, value.toString()),
+                    );
+                  }
+                } else {
+                  if (data['inventory'] != null) {
+                    Map<String, dynamic> decoded = Map<String, dynamic>.from(
+                      data['inventory'],
+                    );
+                    Map<String, List<Map<String, String>>> loadedInventory = {};
+                    decoded.forEach((key, value) {
+                      loadedInventory[key] = (value as List)
+                          .map((item) => Map<String, String>.from(item))
+                          .toList();
+                    });
+                    globalInventory = loadedInventory;
+                    globalCategoryColors = {};
+                  }
                 }
-              }
-              orderedInventory.addAll(loadedInventory);
-              globalInventory = orderedInventory;
-            } else {
-              globalInventory = loadedInventory;
-            }
-          }
-          if (data['categoryColors'] != null) {
-            Map<String, dynamic> colors = Map<String, dynamic>.from(
-              data['categoryColors'],
-            );
-            globalCategoryColors = colors.map(
-              (key, value) => MapEntry(key, value.toString()),
-            );
-          }
-        } else {
-          if (data['inventory'] != null) {
-            Map<String, dynamic> decoded = Map<String, dynamic>.from(
-              data['inventory'],
-            );
-            Map<String, List<Map<String, String>>> loadedInventory = {};
-            decoded.forEach((key, value) {
-              loadedInventory[key] = (value as List)
-                  .map((item) => Map<String, String>.from(item))
-                  .toList();
-            });
-            globalInventory = loadedInventory;
-            globalCategoryColors = {};
-          }
-        }
 
-        // Also save to local disk so offline works
-        await LocalDatabase.saveToDisk();
-      }
+                // Also save to local disk so offline works
+                await LocalDatabase.saveToDisk();
+                onCloudDataUpdated?.call();
+              }
+              if (isFirst) {
+                isFirst = false;
+                completer.complete();
+              }
+            },
+            onError: (e) {
+              if (isFirst) {
+                isFirst = false;
+                completer.completeError(e);
+              }
+              debugPrint("Error listening to inventory: $e");
+            },
+          );
+      await completer.future;
     } catch (e) {
       debugPrint("Error loading inventory from cloud: $e");
     }
@@ -899,22 +937,43 @@ class CloudDatabase {
     if (currentFirebaseUser == null) return;
     try {
       final uid = currentFirebaseUser!.uid;
-      final doc = await _firestore
+      _settingsSub?.cancel();
+      var completer = Completer<void>();
+      bool isFirst = true;
+
+      _settingsSub = _firestore
           .collection('users')
           .doc(uid)
           .collection('data')
           .doc('settings')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        globalShopName = data['shopName'] ?? "RETAIL INVOICE";
-        globalWhatsappNumber = data['whatsappNumber'] ?? "";
-        globalPrinterName = data['printerName'];
-        globalPrinterAddress = data['printerAddress'];
-        globalPrinterType = data['printerType'];
-        // Also save to local disk
-        await LocalDatabase.saveAppSettings();
-      }
+          .snapshots()
+          .listen(
+            (doc) async {
+              if (doc.exists && doc.data() != null) {
+                final data = doc.data()!;
+                globalShopName = data['shopName'] ?? "RETAIL INVOICE";
+                globalWhatsappNumber = data['whatsappNumber'] ?? "";
+                globalPrinterName = data['printerName'];
+                globalPrinterAddress = data['printerAddress'];
+                globalPrinterType = data['printerType'];
+                // Also save to local disk
+                await LocalDatabase.saveAppSettings();
+                onCloudDataUpdated?.call();
+              }
+              if (isFirst) {
+                isFirst = false;
+                completer.complete();
+              }
+            },
+            onError: (e) {
+              if (isFirst) {
+                isFirst = false;
+                completer.completeError(e);
+              }
+              debugPrint("Error listening to settings: $e");
+            },
+          );
+      await completer.future;
     } catch (e) {
       debugPrint("Error loading settings from cloud: $e");
     }
@@ -964,32 +1023,55 @@ class CloudDatabase {
     if (currentFirebaseUser == null) return;
     try {
       final uid = currentFirebaseUser!.uid;
-      final doc = await _firestore
+      _stockSub?.cancel();
+      var completer = Completer<void>();
+      bool isFirst = true;
+
+      _stockSub = _firestore
           .collection('users')
           .doc(uid)
           .collection('data')
           .doc('stock')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        if (data['stock'] != null) {
-          Map<String, dynamic> decodedStock = Map<String, dynamic>.from(
-            data['stock'],
+          .snapshots()
+          .listen(
+            (doc) async {
+              if (doc.exists && doc.data() != null) {
+                final data = doc.data()!;
+                if (data['stock'] != null) {
+                  Map<String, dynamic> decodedStock = Map<String, dynamic>.from(
+                    data['stock'],
+                  );
+                  globalStock = decodedStock.map(
+                    (key, value) =>
+                        MapEntry(key, Map<String, double>.from(value)),
+                  );
+                }
+                if (data['purchaseRates'] != null) {
+                  Map<String, dynamic> decodedRates = Map<String, dynamic>.from(
+                    data['purchaseRates'],
+                  );
+                  globalPurchaseRates = decodedRates.map(
+                    (key, value) =>
+                        MapEntry(key, Map<String, double>.from(value)),
+                  );
+                }
+                await LocalDatabase.saveStockToDisk();
+                onCloudDataUpdated?.call();
+              }
+              if (isFirst) {
+                isFirst = false;
+                completer.complete();
+              }
+            },
+            onError: (e) {
+              if (isFirst) {
+                isFirst = false;
+                completer.completeError(e);
+              }
+              debugPrint("Error listening to stock: $e");
+            },
           );
-          globalStock = decodedStock.map(
-            (key, value) => MapEntry(key, Map<String, double>.from(value)),
-          );
-        }
-        if (data['purchaseRates'] != null) {
-          Map<String, dynamic> decodedRates = Map<String, dynamic>.from(
-            data['purchaseRates'],
-          );
-          globalPurchaseRates = decodedRates.map(
-            (key, value) => MapEntry(key, Map<String, double>.from(value)),
-          );
-        }
-        await LocalDatabase.saveStockToDisk();
-      }
+      await completer.future;
     } catch (e) {
       debugPrint("Error loading stock from cloud: $e");
     }
@@ -1171,27 +1253,49 @@ class CloudDatabase {
   // Load accounts from Firestore for the current user
   static Future<void> loadAccountsFromCloud() async {
     try {
+      if (currentFirebaseUser == null) return;
       final uid = currentFirebaseUser!.uid;
-      final doc = await _firestore
+      _accountsSub?.cancel();
+      var completer = Completer<void>();
+      bool isFirst = true;
+
+      _accountsSub = _firestore
           .collection('users')
           .doc(uid)
           .collection('data')
           .doc('accounts')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        if (data['parties'] != null) {
-          List<Map<String, dynamic>> cloudParties =
-              List<Map<String, dynamic>>.from(data['parties']);
-          if (cloudParties.isNotEmpty) {
-            globalParties = cloudParties;
-            // Also save to local disk
-            await LocalDatabase.savePartiesToDisk();
-          } else if (globalParties.isNotEmpty) {
-            await syncAccountsToCloud();
-          }
-        }
-      }
+          .snapshots()
+          .listen(
+            (doc) async {
+              if (doc.exists && doc.data() != null) {
+                final data = doc.data()!;
+                if (data['parties'] != null) {
+                  List<Map<String, dynamic>> cloudParties =
+                      List<Map<String, dynamic>>.from(data['parties']);
+                  if (cloudParties.isNotEmpty) {
+                    globalParties = cloudParties;
+                    // Also save to local disk
+                    await LocalDatabase.savePartiesToDisk();
+                    onCloudDataUpdated?.call();
+                  } else if (globalParties.isNotEmpty) {
+                    await syncAccountsToCloud();
+                  }
+                }
+              }
+              if (isFirst) {
+                isFirst = false;
+                completer.complete();
+              }
+            },
+            onError: (e) {
+              if (isFirst) {
+                isFirst = false;
+                completer.completeError(e);
+              }
+              debugPrint("Error listening to accounts: $e");
+            },
+          );
+      await completer.future;
     } catch (e) {
       debugPrint("Error loading accounts from cloud: $e");
     }
@@ -1317,6 +1421,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    CloudDatabase.onCloudDataUpdated = () {
+      if (mounted) {
+        setState(() {});
+      }
+    };
     _checkPermissionsAndInit();
 
     // Listen for internet connection changes to auto-sync data made offline
