@@ -887,7 +887,9 @@ class CloudDatabase {
                 }
 
                 // Also save to local disk so offline works
+                CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveToDisk();
+                CloudDatabase.isSyncingFromCloud = false;
                 onCloudDataUpdated?.call();
               }
               if (isFirst) {
@@ -957,7 +959,9 @@ class CloudDatabase {
                 globalPrinterAddress = data['printerAddress'];
                 globalPrinterType = data['printerType'];
                 // Also save to local disk
+                CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveAppSettings();
+                CloudDatabase.isSyncingFromCloud = false;
                 onCloudDataUpdated?.call();
               }
               if (isFirst) {
@@ -1055,7 +1059,9 @@ class CloudDatabase {
                         MapEntry(key, Map<String, double>.from(value)),
                   );
                 }
+                CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveStockToDisk();
+                CloudDatabase.isSyncingFromCloud = false;
                 onCloudDataUpdated?.call();
               }
               if (isFirst) {
@@ -1100,9 +1106,12 @@ class CloudDatabase {
     }
   }
 
+  static bool isSyncingFromCloud = false;
+
   // Auto Sync Data to Cloud
   static Future<void> autoSyncData() async {
     if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
+    if (isSyncingFromCloud) return;
     bool internet = await hasInternetConnection();
     if (!internet) return;
 
@@ -1275,7 +1284,9 @@ class CloudDatabase {
                   if (cloudParties.isNotEmpty) {
                     globalParties = cloudParties;
                     // Also save to local disk
+                    CloudDatabase.isSyncingFromCloud = true;
                     await LocalDatabase.savePartiesToDisk();
+                    CloudDatabase.isSyncingFromCloud = false;
                     onCloudDataUpdated?.call();
                   } else if (globalParties.isNotEmpty) {
                     await syncAccountsToCloud();
@@ -1647,7 +1658,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final discount = (jsonBill['discount'] ?? 0.0).toDouble();
     final showRateColumn = jsonBill['showRateColumn'] ?? true;
     final printInRegional = jsonBill['printInRegional'] ?? true;
-    final cart = jsonBill['cart'] as List<dynamic>? ?? [];
+    final rawCart = jsonBill['cart'] as List<dynamic>? ?? [];
+    final cart = rawCart.map((item) {
+      Map<String, dynamic> newItem = Map<String, dynamic>.from(item as Map);
+      String itemId = newItem['id'] ?? "";
+      if (itemId.isNotEmpty && newItem['name'] == null) {
+        bool found = false;
+        for (var cat in globalInventory.keys) {
+          for (var invItem in globalInventory[cat]!) {
+            if (invItem['id'] == itemId) {
+              newItem['name'] = invItem['name'];
+              newItem['regional_name'] = invItem['regional_name'];
+              found = true;
+              break;
+            }
+          }
+          if (found) break;
+        }
+      }
+      newItem['name'] ??= "Unknown Item";
+      return newItem;
+    }).toList();
     final shopName = jsonBill['shopName'] ?? "";
     final whatsappNumber = jsonBill['whatsappNumber'] ?? "";
 
@@ -1670,7 +1701,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       parsedDate = DateTime.now();
     }
 
-    final displayDate = DateFormat('dd-MM-yyyy hh:mm a').format(parsedDate);
+    final displayDate = DateFormat('dd-MM-yyyy  hh:mm a').format(parsedDate);
 
     double subTotal = cart.fold(0.0, (sum, item) {
       double total = double.tryParse(item['total'].toString()) ?? 0.0;
