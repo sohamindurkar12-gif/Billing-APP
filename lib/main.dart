@@ -1582,6 +1582,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await LocalDatabase.savePartiesToDisk();
     }
 
+    List<Map<String, dynamic>> cartForJson = _cart.map((item) {
+      return {
+        'id': item['id'] ?? "",
+        'qty': item['qty'],
+        'rate': item['rate'],
+        'unit': item['unit'],
+        'total': item['total'],
+      };
+    }).toList();
+
     Map<String, dynamic> jsonBill = {
       'billId': currentBillId,
       'customerName': customerName,
@@ -1589,7 +1599,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'time': timeString,
       'partyTransactionType': _partyTransactionType,
       'addToLedger': addToLedger,
-      'cart': _cart,
+      'cart': cartForJson,
       'hamali': hamali,
       'packing': packing,
       'discount': discount,
@@ -1890,7 +1900,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _cart.clear();
       if (jsonBill['cart'] != null) {
         for (var item in jsonBill['cart']) {
-          _cart.add(Map<String, dynamic>.from(item));
+          Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
+          String itemId = newItem['id'] ?? "";
+          if (itemId.isNotEmpty) {
+            bool found = false;
+            for (var cat in globalInventory.keys) {
+              for (var invItem in globalInventory[cat]!) {
+                if (invItem['id'] == itemId) {
+                  newItem['name'] = invItem['name'];
+                  newItem['regional_name'] = invItem['regional_name'];
+                  found = true;
+                  break;
+                }
+              }
+              if (found) break;
+            }
+          }
+          newItem['name'] ??= "Deleted Item";
+          newItem['regional_name'] ??= "Deleted Item";
+          _cart.add(newItem);
         }
       }
       String customerName = jsonBill['customerName'] ?? "";
@@ -3440,6 +3468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
               setState(() {
                 var entryData = {
+                  'id': item['id'] ?? "",
                   'name': completeDisplayName,
                   'regional_name': regionalName,
                   'qty': localQty,
@@ -3604,6 +3633,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
                       const Divider(),
+                      const SizedBox(height: 10),
+                      Center(
+                        child: Text(
+                          "PURCHASE RATE - ₹${purchaseRate.toStringAsFixed(2)}",
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blueGrey,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
@@ -3702,41 +3743,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 15),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: allowedUnits
-                                .map(
-                                  (u) => Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: ChoiceChip(
-                                      label: Text(
-                                        u,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      selected: currentUnit == u,
-                                      onSelected: (masterUnit == "PCS")
-                                          ? null
-                                          : (v) => setPopupState(
-                                              () => currentUnit = u,
-                                            ),
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: allowedUnits
+                            .map(
+                              (u) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(
+                                    u,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                )
-                                .toList(),
-                          ),
-                          Text(
-                            "PURCHASE RATE - ₹${purchaseRate.toStringAsFixed(2)}",
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blueGrey,
-                            ),
-                          ),
-                        ],
+                                  selected: currentUnit == u,
+                                  onSelected: (masterUnit == "PCS")
+                                      ? null
+                                      : (v) => setPopupState(
+                                          () => currentUnit = u,
+                                        ),
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                       const SizedBox(height: 15),
                       GridView.count(
@@ -5145,18 +5174,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         item,
       ) {
         Map<String, dynamic> newItem = Map<String, dynamic>.from(item);
-        String engName = newItem['name'] ?? "";
-        String regName = "";
-        for (var itemsList in globalInventory.values) {
-          for (var invItem in itemsList) {
-            if (invItem['name'] == engName) {
-              regName = invItem['regional_name'] ?? "";
-              break;
+        String itemId = newItem['id'] ?? "";
+        if (itemId.isNotEmpty) {
+          bool found = false;
+          for (var itemsList in globalInventory.values) {
+            for (var invItem in itemsList) {
+              if (invItem['id'] == itemId) {
+                newItem['name'] = invItem['name'];
+                newItem['regional_name'] = invItem['regional_name'];
+                found = true;
+                break;
+              }
             }
+            if (found) break;
           }
-          if (regName.isNotEmpty) break;
         }
-        newItem['regional_name'] = regName;
+        newItem['name'] ??= "Deleted Item";
+        newItem['regional_name'] ??= "Deleted Item";
         return newItem;
       }).toList();
       _isPartySelected = true;
@@ -5177,9 +5211,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _editingBillTime = jsonBill['time'];
       _partyTransactionType = jsonBill['partyTransactionType'] ?? "SALES";
       _editingBillAddToLedger = jsonBill['addToLedger'] ?? true;
-      _editingOriginalCart = List<Map<String, dynamic>>.from(
-        jsonBill['cart'] ?? [],
-      );
+      _editingOriginalCart = _cart
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
       _editingOriginalPartyTransactionType =
           jsonBill['partyTransactionType'] ?? "SALES";
 
@@ -9951,8 +9985,15 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                 'color': _selectedColor,
                               };
                               if (_editingIndex == null) {
+                                data['id'] = DateTime.now()
+                                    .millisecondsSinceEpoch
+                                    .toString();
                                 _showStockPopup(data, items);
                               } else {
+                                data['id'] =
+                                    items[_editingIndex!]['id'] ??
+                                    DateTime.now().millisecondsSinceEpoch
+                                        .toString();
                                 items[_editingIndex!] = data;
                                 _editingIndex = null;
                                 await LocalDatabase.saveToDisk();
