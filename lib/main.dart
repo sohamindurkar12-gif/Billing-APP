@@ -170,7 +170,7 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
           margin: EdgeInsets.all(8),
         ),
       ),
-      home: const DashboardScreen(),
+      home: DashboardScreen(),
     );
   }
 }
@@ -962,7 +962,14 @@ class CloudDatabase {
                 CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveAppSettings();
                 CloudDatabase.isSyncingFromCloud = false;
-                onCloudDataUpdated?.call();
+
+                if (data.containsKey('lastBillSync')) {
+                  CloudDatabase.loadBillsFromCloud().then((_) {
+                    onCloudDataUpdated?.call();
+                  });
+                } else {
+                  onCloudDataUpdated?.call();
+                }
               }
               if (isFirst) {
                 isFirst = false;
@@ -1138,6 +1145,16 @@ class CloudDatabase {
             Uint8List.fromList(utf8.encode(jsonString)),
             SettableMetadata(contentType: 'application/json'),
           );
+
+      // Notify other devices by updating settings
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('settings')
+          .set({
+            'lastBillSync': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
     } catch (e) {
       debugPrint("Error syncing bill to cloud: $e");
     }
@@ -1196,6 +1213,16 @@ class CloudDatabase {
           }
         }
       }
+
+      // Notify other devices by updating settings
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('settings')
+          .set({
+            'lastBillSync': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
     } catch (e) {
       debugPrint("Error syncing all bills to cloud: $e");
     }
@@ -1239,7 +1266,7 @@ class CloudDatabase {
                   await saf.createFileAsBytes(
                     pathUri,
                     mimeType: 'application/json',
-                    displayName: item.name,
+                    displayName: item.name.replaceAll('.json', ''),
                     bytes: data,
                   );
                 } else {
@@ -1657,7 +1684,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final packing = (jsonBill['packing'] ?? 0.0).toDouble();
     final discount = (jsonBill['discount'] ?? 0.0).toDouble();
     final showRateColumn = jsonBill['showRateColumn'] ?? true;
-    final printInRegional = jsonBill['printInRegional'] ?? true;
+    final printInRegional = false; // Always generate PDF in English
     final rawCart = jsonBill['cart'] as List<dynamic>? ?? [];
     final cart = rawCart.map((item) {
       Map<String, dynamic> newItem = Map<String, dynamic>.from(item as Map);
