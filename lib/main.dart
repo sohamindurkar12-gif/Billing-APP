@@ -3881,24 +3881,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String completeDisplayName = baseName;
     String regionalName = (item['regional_name'] ?? "").trim();
 
-    double stockLeft = 0.0;
-    double purchaseRate = 0.0;
-    for (String cat in globalStock.keys) {
-      if (globalStock[cat]!.containsKey(baseName)) {
-        stockLeft = globalStock[cat]![baseName]!;
-        purchaseRate = globalPurchaseRates[cat]?[baseName] ?? 0.0;
-        break;
-      }
-    }
-
     final FocusNode numpadFocusNode = FocusNode();
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
-        child: StatefulBuilder(
-          builder: (context, setPopupState) {
+        child: ValueListenableBuilder(
+          valueListenable: CloudDatabase.cloudUpdateNotifier,
+          builder: (context, _, __) {
+            double stockLeft = 0.0;
+            double purchaseRate = 0.0;
+            for (String cat in globalStock.keys) {
+              if (globalStock[cat]!.containsKey(baseName)) {
+                stockLeft = globalStock[cat]![baseName]!;
+                purchaseRate = globalPurchaseRates[cat]?[baseName] ?? 0.0;
+                break;
+              }
+            }
+            return StatefulBuilder(
+              builder: (context, setPopupState) {
             List<String> allowedUnits = [];
             if (masterUnit == "Kg" || masterUnit == "GRAM")
               allowedUnits = ["Kg", "GRAM"];
@@ -4334,6 +4336,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             );
+          },
+        );
           },
         ),
       ),
@@ -6717,7 +6721,10 @@ class WarehouseScreen extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return ValueListenableBuilder(
+      valueListenable: CloudDatabase.cloudUpdateNotifier,
+      builder: (context, _, __) {
+        return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.blueGrey[800],
         centerTitle: true,
@@ -6857,6 +6864,8 @@ class WarehouseScreen extends StatelessWidget {
         ),
       ),
     );
+      },
+    );
   }
 }
 
@@ -6899,7 +6908,10 @@ class _StockCategoryScreenState extends State<StockCategoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    List<String> categories = globalInventory.keys.toList();
+    return ValueListenableBuilder(
+      valueListenable: CloudDatabase.cloudUpdateNotifier,
+      builder: (context, _, __) {
+        List<String> categories = globalInventory.keys.toList();
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     double screenGrandTotal = 0.0;
@@ -7317,6 +7329,8 @@ class _StockCategoryScreenState extends State<StockCategoryScreen> {
         ],
       ),
     );
+      },
+    );
   }
 }
 
@@ -7419,7 +7433,10 @@ class _StockItemsScreenState extends State<StockItemsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    var items = globalInventory[widget.categoryName] ?? [];
+    return ValueListenableBuilder(
+      valueListenable: CloudDatabase.cloudUpdateNotifier,
+      builder: (context, _, __) {
+        var items = globalInventory[widget.categoryName] ?? [];
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     double totalCategoryStockOf = 0.0;
@@ -7779,6 +7796,8 @@ class _StockItemsScreenState extends State<StockItemsScreen> {
           ),
         ],
       ),
+    );
+      },
     );
   }
 }
@@ -8275,6 +8294,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _loadHistory();
+    CloudDatabase.cloudUpdateNotifier.addListener(_loadHistory);
+  }
+
+  @override
+  void dispose() {
+    CloudDatabase.cloudUpdateNotifier.removeListener(_loadHistory);
+    super.dispose();
   }
 
   Future<void> _loadHistory() async {
@@ -8943,6 +8969,13 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
   void initState() {
     super.initState();
     _loadHistory();
+    CloudDatabase.cloudUpdateNotifier.addListener(_loadHistory);
+  }
+
+  @override
+  void dispose() {
+    CloudDatabase.cloudUpdateNotifier.removeListener(_loadHistory);
+    super.dispose();
   }
 
   Future<void> _loadHistory() async {
