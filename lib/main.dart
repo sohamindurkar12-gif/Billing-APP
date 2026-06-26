@@ -1091,19 +1091,31 @@ class CloudDatabase {
                   Map<String, dynamic> decodedStock = Map<String, dynamic>.from(
                     data['stock'],
                   );
-                  globalStock = decodedStock.map(
-                    (key, value) =>
-                        MapEntry(key, Map<String, double>.from(value)),
-                  );
+                  globalStock = decodedStock.map((key, value) {
+                    Map<String, dynamic> valMap = Map<String, dynamic>.from(
+                      value,
+                    );
+                    Map<String, double> doubleMap = {};
+                    valMap.forEach((k, v) {
+                      doubleMap[k] = (v is num) ? v.toDouble() : 0.0;
+                    });
+                    return MapEntry(key, doubleMap);
+                  });
                 }
                 if (data['purchaseRates'] != null) {
                   Map<String, dynamic> decodedRates = Map<String, dynamic>.from(
                     data['purchaseRates'],
                   );
-                  globalPurchaseRates = decodedRates.map(
-                    (key, value) =>
-                        MapEntry(key, Map<String, double>.from(value)),
-                  );
+                  globalPurchaseRates = decodedRates.map((key, value) {
+                    Map<String, dynamic> valMap = Map<String, dynamic>.from(
+                      value,
+                    );
+                    Map<String, double> doubleMap = {};
+                    valMap.forEach((k, v) {
+                      doubleMap[k] = (v is num) ? v.toDouble() : 0.0;
+                    });
+                    return MapEntry(key, doubleMap);
+                  });
                 }
                 CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveStockToDisk();
@@ -2082,6 +2094,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     if (addToLedger && _isPartySelected && _selectedParty != null) {
+      String pName = _selectedParty!['name'] ?? "";
+      var match = globalParties.where((p) => p['name'] == pName);
+      if (match.isNotEmpty) {
+        _selectedParty = match.first;
+      }
       if (_selectedParty!['transactions'] == null) {
         _selectedParty!['transactions'] = <Map<String, dynamic>>[];
       }
