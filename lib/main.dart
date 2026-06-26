@@ -1252,6 +1252,8 @@ class CloudDatabase {
           }
         }
       }
+      CloudDatabase.cloudUpdateNotifier.value++;
+      CloudDatabase.onCloudDataUpdated?.call();
     } catch (e) {
       debugPrint("Error loading bills from cloud: $e");
     }
@@ -1600,6 +1602,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         await CloudDatabase.loadAccountsFromCloud();
         await CloudDatabase.loadStockFromCloud();
         await CloudDatabase.loadBillsFromCloud();
+        await CloudDatabase.syncPendingBillsToCloud();
       }
     }
 
@@ -5997,6 +6000,7 @@ class _SetupScreenState extends State<SetupScreen> {
                               } else {
                                 // Upload local
                                 await LocalDatabase.saveAppSettings();
+                                await CloudDatabase.autoSyncData();
                               }
                             } else if (cloudHasData && !localHasData) {
                               setDialogState(() {
@@ -6006,6 +6010,7 @@ class _SetupScreenState extends State<SetupScreen> {
                               await CloudDatabase.loadInventoryFromCloud();
                               await CloudDatabase.loadAccountsFromCloud();
                               await CloudDatabase.loadStockFromCloud();
+                              await CloudDatabase.loadBillsFromCloud();
                               smartBillingAppKey.currentState?.rebuildApp();
                               await LocalDatabase.saveAppSettings();
                             } else {
@@ -6014,6 +6019,7 @@ class _SetupScreenState extends State<SetupScreen> {
                                 globalCloudSyncEnabled = true;
                               });
                               await LocalDatabase.saveAppSettings();
+                              await CloudDatabase.autoSyncData();
                             }
                           } else {
                             // Turning OFF
