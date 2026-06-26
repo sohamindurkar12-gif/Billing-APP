@@ -107,70 +107,78 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      builder: (context, child) {
-        final data = MediaQuery.maybeOf(context);
-        if (data == null) return child!;
-        return MediaQuery(
-          data: data.copyWith(textScaler: const TextScaler.linear(1.0)),
-          child: child!,
-        );
-      },
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurpleAccent,
-          brightness: currentThemeSetting == "LIGHT"
-              ? Brightness.light
-              : Brightness.dark,
-        ),
-        useMaterial3: true,
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 2,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: currentThemeSetting == "LIGHT"
-              ? Colors.grey.shade100
-              : Colors.black26,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(
-              color: Colors.deepPurpleAccent,
-              width: 1.5,
+    return ValueListenableBuilder(
+      valueListenable: CloudDatabase.cloudUpdateNotifier,
+      builder: (context, _, __) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          builder: (context, child) {
+            final data = MediaQuery.maybeOf(context);
+            if (data == null) return child!;
+            return MediaQuery(
+              data: data.copyWith(textScaler: const TextScaler.linear(1.0)),
+              child: child!,
+            );
+          },
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: Colors.deepPurpleAccent,
+              brightness: currentThemeSetting == "LIGHT"
+                  ? Brightness.light
+                  : Brightness.dark,
+            ),
+            useMaterial3: true,
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                elevation: 2,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+              ),
+            ),
+            inputDecorationTheme: InputDecorationTheme(
+              filled: true,
+              fillColor: currentThemeSetting == "LIGHT"
+                  ? Colors.grey.shade100
+                  : Colors.black26,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: Colors.deepPurpleAccent,
+                  width: 1.5,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+            ),
+            dialogTheme: const DialogThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(28)),
+              ),
+              elevation: 8,
+            ),
+            cardTheme: const CardThemeData(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(20)),
+              ),
+              elevation: 2,
+              margin: EdgeInsets.all(8),
             ),
           ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
-        ),
-        dialogTheme: const DialogThemeData(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(28)),
-          ),
-          elevation: 8,
-        ),
-        cardTheme: const CardThemeData(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(20)),
-          ),
-          elevation: 2,
-          margin: EdgeInsets.all(8),
-        ),
-      ),
-      home: DashboardScreen(),
+          home: DashboardScreen(),
+        );
+      },
     );
   }
 }
@@ -804,6 +812,7 @@ class CloudDatabase {
   static StreamSubscription? _stockSub;
 
   static void Function()? onCloudDataUpdated;
+  static final ValueNotifier<int> cloudUpdateNotifier = ValueNotifier(0);
 
   static void cancelAllSubscriptions() {
     _inventorySub?.cancel();
@@ -890,6 +899,7 @@ class CloudDatabase {
                 CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveToDisk();
                 CloudDatabase.isSyncingFromCloud = false;
+                CloudDatabase.cloudUpdateNotifier.value++;
                 onCloudDataUpdated?.call();
               }
               if (isFirst) {
@@ -965,9 +975,11 @@ class CloudDatabase {
 
                 if (data.containsKey('lastBillSync')) {
                   CloudDatabase.loadBillsFromCloud().then((_) {
+                    CloudDatabase.cloudUpdateNotifier.value++;
                     onCloudDataUpdated?.call();
                   });
                 } else {
+                  CloudDatabase.cloudUpdateNotifier.value++;
                   onCloudDataUpdated?.call();
                 }
               }
@@ -1069,6 +1081,7 @@ class CloudDatabase {
                 CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveStockToDisk();
                 CloudDatabase.isSyncingFromCloud = false;
+                CloudDatabase.cloudUpdateNotifier.value++;
                 onCloudDataUpdated?.call();
               }
               if (isFirst) {
@@ -1314,6 +1327,7 @@ class CloudDatabase {
                     CloudDatabase.isSyncingFromCloud = true;
                     await LocalDatabase.savePartiesToDisk();
                     CloudDatabase.isSyncingFromCloud = false;
+                    CloudDatabase.cloudUpdateNotifier.value++;
                     onCloudDataUpdated?.call();
                   } else if (globalParties.isNotEmpty) {
                     await syncAccountsToCloud();
