@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>How to Use - Billing APP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+    <!-- Navbar -->
+    <nav class="fixed top-0 left-0 right-0 bg-white/90 backdrop-blur-md shadow-sm z-50 border-b border-slate-100">
+        <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <img src="logo.png" alt="Billing App Logo" class="w-10 h-10 object-contain" />
+                <span class="text-xl font-bold tracking-tight text-slate-900">Billing APP</span>
+            </div>
+            <a href="index.html" class="text-slate-600 hover:text-slate-900 font-medium transition duration-300">
+                Back to Home
+            </a>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <header class="pt-36 pb-16 bg-gradient-to-b from-blue-50 to-slate-50 px-6 text-center">
+        <div class="max-w-3xl mx-auto space-y-4">
+            <h1 class="text-4xl md:text-5xl font-black text-slate-900">Ultimate User Guide</h1>
+            <p class="text-lg text-slate-600">Everything you need to know to master the Billing APP, from initial setup
+                to maintaining your entire shop's ledger.</p>
+        </div>
+    </header>
+
+    <!-- Content -->
+    <main class="pb-24 px-6 max-w-4xl mx-auto space-y-12">
+
+        <!-- Section 1 -->
+        <section
+            class="bg-white rounded-[2rem] shadow-lg p-8 md:p-10 border-y border-slate-100 border-x-[6px] border-x-blue-500">
+            <div class="flex items-center gap-4 mb-6">
+                <div
+                    class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600 text-xl font-bold">
+                    1</div>
+                <h2 class="text-2xl font-bold text-slate-900">Initial Setup & Printer Configuration</h2>
+            </div>
+            <div class="space-y-4 text-slate-600 leading-relaxed">
+                <p>Before creating your first bill, it is highly recommended to configure your shop details and printer.
+                </p>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Shop Profile:</strong> Go to <em>Settings</em> and update your Shop Name & Phone Number.
+                        These will appear on all your printed bills and PDFs.</li>
+                    <li><strong>Printer Setup:</strong> The Billing APP strictly supports <strong>80mm (3-inch) Thermal
+                            Printers</strong> to ensure standard professional receipt formatting.</li>
+                    <li>You can connect your printer via <strong>USB, Bluetooth, or Network (Wi-Fi/LAN)</strong>. Go to
+                        the Printer Configuration tab and pair your 80mm thermal printer seamlessly.</li>
+                    <li><strong>Language:</strong> You can enable Regional Language support while creating bills if you
+                        want to
+                        print item names in either language as per your requirement.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Section 2 -->
+        <section
+            class="bg-white rounded-[2rem] shadow-lg p-8 md:p-10 border-y border-slate-100 border-x-[6px] border-x-emerald-500">
+            <div class="flex items-center gap-4 mb-6">
+                <div
+                    class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600 text-xl font-bold">
+                    2</div>
+                <h2 class="text-2xl font-bold text-slate-900">Inventory & Stock Management</h2>
+            </div>
+            <div class="space-y-4 text-slate-600 leading-relaxed">
+                <p>Organize your products effectively to speed up billing later.</p>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Add Categories:</strong> Open the Inventory tab and create categories (e.g., Groceries,
+                        Electronics). You can assign a specific color to each category for quick visual identification.
+                    </li>
+                    <li><strong>Add Items:</strong> Inside a category, add new items. Provide a standard English Name,
+                        a Regional Name, and set the default Rate along with the master unit.</li>
+                    <li><strong>Units Setup:</strong> Define a Master Unit (e.g., Kg) and an Alternate Unit (e.g.,
+                        GRAM). The app will automatically handle the math while billing.</li>
+                    <li><strong>Maintain Stock:</strong> Use the Stock tab to record incoming stock. The app
+                        automatically deducts stock when you generate a bill. Low stock alerts will help you re-order in
+                        time.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Section 3 -->
+        <section
+            class="bg-white rounded-[2rem] shadow-lg p-8 md:p-10 border-y border-slate-100 border-x-[6px] border-x-purple-500">
+            <div class="flex items-center gap-4 mb-6">
+                <div
+                    class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600 text-xl font-bold">
+                    3</div>
+                <h2 class="text-2xl font-bold text-slate-900">Creating Bills using Smart Num Pad</h2>
+            </div>
+            <div class="space-y-4 text-slate-600 leading-relaxed">
+                <p>Generating invoices is the fastest part of the app thanks to our optimized layouts.</p>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Choose a Layout:</strong> You can select between List, Grid, or Hybrid layout. We highly
+                        recommend the <strong>Hybrid Layout</strong> for the best experience.</li>
+                    <li><strong>Smart Num Pad:</strong> Do not waste time typing names. Use the smart on-screen Num Pad
+                        to quickly tap quantities and enter amounts. It fetches the default rate automatically.</li>
+                    <li><strong>Edit on the Fly:</strong> If you are giving a special discount, you can manually edit
+                        the rate of an item specifically for that single bill without changing the master inventory
+                        rate.</li>
+                    <li><strong>Checkout:</strong> Review the cart, select a saved Customer/Party (or enter a new name),
+                        and click the Print icon to instantly push the receipt to your 80mm thermal printer.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Section 4 -->
+        <section
+            class="bg-white rounded-[2rem] shadow-lg p-8 md:p-10 border-y border-slate-100 border-x-[6px] border-x-orange-500">
+            <div class="flex items-center gap-4 mb-6">
+                <div
+                    class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 text-xl font-bold">
+                    4</div>
+                <h2 class="text-2xl font-bold text-slate-900">Managing Parties & Ledger (Khata)</h2>
+            </div>
+            <div class="space-y-4 text-slate-600 leading-relaxed">
+                <p>Keep track of your regular customers and their outstanding balances effortlessly.</p>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Add a Party:</strong> In the Parties/Ledger tab, you can add your regular customers with
+                        their phone numbers and addresses.</li>
+                    <li><strong>Give Credit:</strong> When creating a bill for a saved party, you can mark the bill as
+                        "Unpaid" or "Partial Payment". The pending amount is automatically added to their Ledger
+                        balance.</li>
+                    <li><strong>Receive Payments:</strong> When a customer pays off their debt, go to their Ledger
+                        profile and record a "Payment Received" entry. This will immediately reduce their outstanding
+                        balance.</li>
+                    <li><strong>Full History:</strong> You can view a chronological list of every purchase they made and
+                        every payment they gave, ensuring zero disputes over money.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Section 5 -->
+        <section
+            class="bg-white rounded-[2rem] shadow-lg p-8 md:p-10 border-y border-slate-100 border-x-[6px] border-x-rose-500">
+            <div class="flex items-center gap-4 mb-6">
+                <div
+                    class="w-12 h-12 bg-rose-100 rounded-xl flex items-center justify-center text-rose-600 text-xl font-bold">
+                    5</div>
+                <h2 class="text-2xl font-bold text-slate-900">Bill History & Sharing PDF</h2>
+            </div>
+            <div class="space-y-4 text-slate-600 leading-relaxed">
+                <p>Never lose track of a past transaction.</p>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Bill History:</strong> Navigate to the History tab to see every invoice ever generated,
+                        sorted by date.</li>
+                    <li><strong>Search:</strong> Use the search bar to find a specific bill by the Customer's Name or
+                        the exact Date of billing.</li>
+                    <li><strong>Re-print or Share:</strong> Open any old bill to re-print it to your thermal printer. If
+                        the customer is not in the shop, click the <strong>Share PDF</strong> button. The app will
+                        generate a highly professional A4/Receipt PDF that you can send directly via WhatsApp or Email.
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Section 6 -->
+        <section
+            class="bg-white rounded-[2rem] shadow-lg p-8 md:p-10 border-y border-slate-100 border-x-[6px] border-x-cyan-500">
+            <div class="flex items-center gap-4 mb-6">
+                <div
+                    class="w-12 h-12 bg-cyan-100 rounded-xl flex items-center justify-center text-cyan-600 text-xl font-bold">
+                    6</div>
+                <h2 class="text-2xl font-bold text-slate-900">Cloud Sync & Data Backup</h2>
+            </div>
+            <div class="space-y-4 text-slate-600 leading-relaxed">
+                <p>Your shop's data is precious. Keep it safe.</p>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Google Login:</strong> Sign in with your Google account from the app settings.</li>
+                    <li><strong>Automatic Backup:</strong> Once signed in, you can easily backup your entire inventory,
+                        ledger, and bill history to the secure cloud servers.</li>
+                    <li><strong>Multi-Device Sync:</strong> If you upgrade your phone or want to run the app on a
+                        Windows PC simultaneously, simply log in with the exact same Google account and restore your
+                        data in one tap.</li>
+                </ul>
+
+                <div
+                    class="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 flex gap-3 items-start">
+                    <i class="fa-solid fa-crown text-amber-500 mt-1 text-lg"></i>
+                    <div class="text-sm md:text-base">
+                        <strong class="font-black text-amber-950 uppercase text-xs tracking-wider block mb-1">VIP
+                            Exclusive Feature</strong>
+                        The Cloud Sync & Data Backup feature is reserved exclusively for VIP users. To upgrade to VIP
+                        status and unlock this feature, please contact <strong>Mr. Soham Gurunath
+                            Indurkar,</strong> the alone developer of this whole app, or <strong>Mr. Shrinivas
+                            Phuke</strong>,
+                        or
+                        mail at <a href="mailto:sohamindurkar12@gmail.com"
+                            class="font-bold underline hover:text-amber-700 transition">sohamindurkar12@gmail.com</a>.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 text-white py-12 px-6 text-center">
+        <div class="text-xs text-slate-600 flex flex-col items-center space-y-4">
+            <div class="space-y-1">
+                <p>COMPLETELY DESIGNED , MADE AND OWNED BY</p>
+                <p>MR. SOHAM GURUNATH INDURKAR.</p>
+                <p>&copy; 2026 SOHAM INDURKAR. ALL RIGHTS RESERVED.</p>
+            </div>
+            <div class="flex gap-4 font-semibold mt-4">
+                <a href="privacy-policy.html" class="hover:text-white transition">Privacy Policy</a>
+                <span>|</span>
+                <a href="support.html" class="hover:text-white transition">Support & Contact</a>
+            </div>
+        </div>
+    </footer>
+</body>
+
+</html>
