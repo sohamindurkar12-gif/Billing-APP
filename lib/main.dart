@@ -376,6 +376,29 @@ class LocalDatabase {
     return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\INVENTORY BACKUPS";
   }
 
+  static Future<bool> hasLocalBills() async {
+    try {
+      if (Platform.isWindows) {
+        String dir = _getWindowsBillsDir();
+        if (Directory(dir).existsSync()) {
+          final files = Directory(dir).listSync();
+          return files.any((f) => f.path.endsWith('.json'));
+        }
+      } else {
+        final uri = await getMyBillsFolderUri();
+        if (uri != null) {
+          final files = await saf
+              .listFiles(uri, columns: [saf.DocumentFileColumn.displayName])
+              .toList();
+          return files.any((f) => f.name?.endsWith('.json') ?? false);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error checking local bills: $e");
+    }
+    return false;
+  }
+
   static String _getWindowsBillsDir() {
     return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\MYBILLS";
   }
@@ -914,7 +937,7 @@ class CloudDatabase {
                     Map<String, List<Map<String, String>>> loadedInventory = {};
                     decoded.forEach((key, value) {
                       loadedInventory[key] = (value as List)
-                          .map((item) => Map<String, String>.from(item))
+                          .map((e) => Map<String, String>.from(e))
                           .toList();
                     });
                     globalInventory = loadedInventory;
@@ -923,6 +946,14 @@ class CloudDatabase {
                 }
 
                 // Also save to local disk so offline works
+                CloudDatabase.isSyncingFromCloud = true;
+                await LocalDatabase.saveToDisk();
+                CloudDatabase.isSyncingFromCloud = false;
+                CloudDatabase.cloudUpdateNotifier.value++;
+                onCloudDataUpdated?.call();
+              } else {
+                globalInventory.clear();
+                globalCategoryColors = {};
                 CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveToDisk();
                 CloudDatabase.isSyncingFromCloud = false;
@@ -1002,13 +1033,18 @@ class CloudDatabase {
 
                 if (data.containsKey('lastBillSync')) {
                   CloudDatabase.loadBillsFromCloud().then((_) {
-                    CloudDatabase.cloudUpdateNotifier.value++;
-                    onCloudDataUpdated?.call();
+                    smartBillingAppKey.currentState?.rebuildApp();
                   });
                 } else {
-                  CloudDatabase.cloudUpdateNotifier.value++;
-                  onCloudDataUpdated?.call();
+                  smartBillingAppKey.currentState?.rebuildApp();
                 }
+              } else {
+                globalShopName = "RETAIL INVOICE";
+                globalWhatsappNumber = "";
+                CloudDatabase.isSyncingFromCloud = true;
+                await LocalDatabase.saveAppSettings();
+                CloudDatabase.isSyncingFromCloud = false;
+                smartBillingAppKey.currentState?.rebuildApp();
               }
               if (isFirst) {
                 isFirst = false;
@@ -1095,11 +1131,13 @@ class CloudDatabase {
                     Map<String, dynamic> valMap = Map<String, dynamic>.from(
                       value,
                     );
-                    Map<String, double> doubleMap = {};
-                    valMap.forEach((k, v) {
-                      doubleMap[k] = (v is num) ? v.toDouble() : 0.0;
-                    });
-                    return MapEntry(key, doubleMap);
+                    return MapEntry(
+                      key,
+                      valMap.map(
+                        (k, v) =>
+                            MapEntry(k, double.tryParse(v.toString()) ?? 0.0),
+                      ),
+                    );
                   });
                 }
                 if (data['purchaseRates'] != null) {
@@ -1117,6 +1155,14 @@ class CloudDatabase {
                     return MapEntry(key, doubleMap);
                   });
                 }
+                CloudDatabase.isSyncingFromCloud = true;
+                await LocalDatabase.saveStockToDisk();
+                CloudDatabase.isSyncingFromCloud = false;
+                CloudDatabase.cloudUpdateNotifier.value++;
+                onCloudDataUpdated?.call();
+              } else {
+                globalStock.clear();
+                globalPurchaseRates.clear();
                 CloudDatabase.isSyncingFromCloud = true;
                 await LocalDatabase.saveStockToDisk();
                 CloudDatabase.isSyncingFromCloud = false;
@@ -1146,19 +1192,48 @@ class CloudDatabase {
     if (currentFirebaseUser == null) return false;
     try {
       final uid = currentFirebaseUser!.uid;
-      final doc = await _firestore
+
+      final invDoc = await _firestore
           .collection('users')
           .doc(uid)
           .collection('data')
           .doc('inventory')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        Map<String, dynamic> data = doc.data()!;
-        if (data.containsKey('inventory')) {
-          Map<String, dynamic> inv = data['inventory'];
-          if (inv.isNotEmpty) return true;
-        }
+          .get(const GetOptions(source: Source.server));
+      if (invDoc.exists && invDoc.data() != null) {
+        if ((invDoc.data()!['inventory'] as Map?)?.isNotEmpty ?? false)
+          return true;
       }
+
+      final stockDoc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('stock')
+          .get(const GetOptions(source: Source.server));
+      if (stockDoc.exists && stockDoc.data() != null) {
+        if ((stockDoc.data()!['stock'] as Map?)?.isNotEmpty ?? false)
+          return true;
+      }
+
+      final accDoc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('accounts')
+          .get(const GetOptions(source: Source.server));
+      if (accDoc.exists && accDoc.data() != null) {
+        if ((accDoc.data()!['parties'] as List?)?.isNotEmpty ?? false)
+          return true;
+      }
+
+      final billsSnap = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('bills')
+          .limit(1)
+          .get(const GetOptions(source: Source.server));
+      if (billsSnap.docs.isNotEmpty) return true;
+
       return false;
     } catch (e) {
       return false;
@@ -1171,8 +1246,6 @@ class CloudDatabase {
   static Future<void> autoSyncData() async {
     if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
     if (isSyncingFromCloud) return;
-    bool internet = await hasInternetConnection();
-    if (!internet) return;
 
     await syncSettingsToCloud();
     await syncInventoryToCloud();
@@ -1184,8 +1257,6 @@ class CloudDatabase {
   // Sync a single bill to Cloud Firestore
   static Future<void> syncBillToCloud(String billId, String jsonString) async {
     if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
-    bool internet = await hasInternetConnection();
-    if (!internet) return;
 
     try {
       final uid = currentFirebaseUser!.uid;
@@ -1274,8 +1345,6 @@ class CloudDatabase {
   // Upload any offline-created bills that are missing in Firestore
   static Future<void> syncPendingBillsToCloud() async {
     if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
-    bool internet = await hasInternetConnection();
-    if (!internet) return;
 
     try {
       final uid = currentFirebaseUser!.uid;
@@ -1361,6 +1430,13 @@ class CloudDatabase {
                     await syncAccountsToCloud();
                   }
                 }
+              } else {
+                globalParties.clear();
+                CloudDatabase.isSyncingFromCloud = true;
+                await LocalDatabase.savePartiesToDisk();
+                CloudDatabase.isSyncingFromCloud = false;
+                CloudDatabase.cloudUpdateNotifier.value++;
+                onCloudDataUpdated?.call();
               }
               if (isFirst) {
                 isFirst = false;
@@ -5817,6 +5893,26 @@ class _SetupScreenState extends State<SetupScreen> {
         _isSigningIn = false;
       });
 
+      // Explicitly create the user document so it is visible in the Firebase Console
+      if (currentFirebaseUser != null) {
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentFirebaseUser!.uid)
+              .set({
+                'email': currentFirebaseUser!.email,
+                'lastLogin': FieldValue.serverTimestamp(),
+              }, SetOptions(merge: true));
+        } catch (e) {
+          debugPrint("Failed to create user document: $e");
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text("FIREBASE WRITE ERROR: $e")));
+          }
+        }
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -5993,7 +6089,9 @@ class _SetupScreenState extends State<SetupScreen> {
                                 await CloudDatabase.checkIfCloudHasData();
                             bool localHasData =
                                 globalStock.isNotEmpty ||
-                                globalInventory.isNotEmpty;
+                                globalInventory.isNotEmpty ||
+                                globalParties.isNotEmpty ||
+                                await LocalDatabase.hasLocalBills();
 
                             if (cloudHasData && localHasData) {
                               bool? result = await _showSyncConflictPrompt(
@@ -6037,6 +6135,12 @@ class _SetupScreenState extends State<SetupScreen> {
                               });
                               await LocalDatabase.saveAppSettings();
                               await CloudDatabase.autoSyncData();
+                              await CloudDatabase.loadSettingsFromCloud();
+                              await CloudDatabase.loadInventoryFromCloud();
+                              await CloudDatabase.loadAccountsFromCloud();
+                              await CloudDatabase.loadStockFromCloud();
+                              await CloudDatabase.loadBillsFromCloud();
+                              smartBillingAppKey.currentState?.rebuildApp();
                             }
                           } else {
                             // Turning OFF
