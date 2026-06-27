@@ -2633,7 +2633,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         void drawTextLine(
           String text,
           double fontSize, {
-          bool isBold = false,
+          bool isBold = true,
           TextAlign align = TextAlign.left,
           String fontFamily = 'sans-serif',
           bool addSpacing = true,
@@ -2667,7 +2667,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           double x,
           double width,
           double fontSize, {
-          bool isBold = false,
+          bool isBold = true,
           TextAlign align = TextAlign.left,
           String fontFamily = 'sans-serif',
         }) {
@@ -2738,9 +2738,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         drawTextLine(
           "CUSTOMER : ${customerName.toUpperCase()}",
           22,
+          isBold: true,
           align: TextAlign.left,
         );
-        drawTextLine("DATE & TIME : $displayDate", 22, align: TextAlign.left);
+        drawTextLine(
+          "DATE & TIME : $displayDate",
+          22,
+          isBold: true,
+          align: TextAlign.left,
+        );
         drawTextLine(
           '-' * 100,
           22,
@@ -2856,22 +2862,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         drawTextLine(
           "SUB-TOTAL : ${roundedSubTotal.toStringAsFixed(2)}",
           22,
+          isBold: true,
           align: TextAlign.right,
         );
         drawTextLine(
           "PACKING : ${packing.toStringAsFixed(2)}",
           22,
+          isBold: true,
           align: TextAlign.right,
         );
         drawTextLine(
           "HAMALI : ${hamali.toStringAsFixed(2)}",
           22,
+          isBold: true,
           align: TextAlign.right,
         );
         if (discount > 0)
           drawTextLine(
             "DISCOUNT : ${discount.toStringAsFixed(2)}",
             22,
+            isBold: true,
             align: TextAlign.right,
           );
 
@@ -2918,16 +2928,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         drawTextLine(
           "SOFTWARE DESIGNED, MADE AND OWNED BY",
           22,
+          isBold: true,
           align: TextAlign.center,
         );
         drawTextLine(
           "MR. SOHAM GURUNATH INDURKAR",
           22,
+          isBold: true,
           align: TextAlign.center,
         );
         drawTextLine(
           "CONTACT :- sohamindurkar12@gmail.com",
           22,
+          isBold: true,
           align: TextAlign.center,
         );
 
@@ -3977,8 +3990,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         String combinedForSearch = regionalName.isNotEmpty
             ? "$baseName ($regionalName)"
             : baseName;
-        if (combinedForSearch.toLowerCase().contains(query.toLowerCase()))
-          matches.add(item);
+        if (combinedForSearch.toLowerCase().contains(query.toLowerCase())) {
+          double pr = globalPurchaseRates[cat]?[baseName] ?? 0.0;
+          Map<String, String> searchItem = Map.from(item);
+          searchItem['purchase_rate'] = pr.toStringAsFixed(2);
+          matches.add(searchItem);
+        }
       }
     });
     setState(() => _searchResults = matches);
@@ -4790,7 +4807,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                         subtitle: Text(
-                          "₹${_searchResults[index]['rate']} per ${_searchResults[index]['unit']}",
+                          "₹${_searchResults[index]['rate']} per ${_searchResults[index]['unit']}  (PR- ${_searchResults[index]['purchase_rate'] ?? '0'})",
                           style: TextStyle(
                             color: _searchResults[index]['color'] != null
                                 ? Colors.black87
