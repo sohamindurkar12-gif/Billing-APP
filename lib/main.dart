@@ -1226,6 +1226,16 @@ class CloudDatabase {
           return true;
       }
 
+      final settingsDoc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('data')
+          .doc('settings')
+          .get(const GetOptions(source: Source.server));
+      if (settingsDoc.exists && settingsDoc.data() != null) {
+        if (settingsDoc.data()!.containsKey('lastUpdated')) return true;
+      }
+
       final billsSnap = await _firestore
           .collection('users')
           .doc(uid)
@@ -1246,11 +1256,14 @@ class CloudDatabase {
   static Future<void> autoSyncData() async {
     if (!globalCloudSyncEnabled || currentFirebaseUser == null) return;
     if (isSyncingFromCloud) return;
+    bool internet = await hasInternetConnection();
+    if (!internet) return;
 
     await syncSettingsToCloud();
-    await syncInventoryToCloud();
-    await syncAccountsToCloud();
-    await syncStockToCloud();
+    if (globalInventory.isNotEmpty) await syncInventoryToCloud();
+    if (globalParties.isNotEmpty) await syncAccountsToCloud();
+    if (globalStock.isNotEmpty || globalPurchaseRates.isNotEmpty)
+      await syncStockToCloud();
     await syncPendingBillsToCloud();
   }
 
@@ -6128,7 +6141,7 @@ class _SetupScreenState extends State<SetupScreen> {
                               await CloudDatabase.loadBillsFromCloud();
                               smartBillingAppKey.currentState?.rebuildApp();
                               await LocalDatabase.saveAppSettings();
-                            } else {
+                            } else if (!cloudHasData && localHasData) {
                               // Cloud empty, upload local
                               setDialogState(() {
                                 globalCloudSyncEnabled = true;
@@ -6141,6 +6154,12 @@ class _SetupScreenState extends State<SetupScreen> {
                               await CloudDatabase.loadStockFromCloud();
                               await CloudDatabase.loadBillsFromCloud();
                               smartBillingAppKey.currentState?.rebuildApp();
+                            } else {
+                              // Both empty
+                              setDialogState(() {
+                                globalCloudSyncEnabled = true;
+                              });
+                              await LocalDatabase.saveAppSettings();
                             }
                           } else {
                             // Turning OFF
