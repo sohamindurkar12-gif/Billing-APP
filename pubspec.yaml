@@ -120,3 +120,12 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+msix_config:
+  display_name: "Billing APP - Invoice & Ledger"
+  publisher_display_name: "Soham Gurunath Indurkar"
+  identity_name: "SohamGurunathIndurkar.BillingAPP-InvoiceLedger"
+  publisher: "CN=9A61E7F9-181E-4432-85BD-F1EFFE15D436"
+  msix_version: "1.0.0.0"
+  logo_path: "assets/logo.png"
+  capabilities: "internetClient, privateNetworkClientServer"
