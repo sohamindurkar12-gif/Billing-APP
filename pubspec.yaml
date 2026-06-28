@@ -129,4 +129,3 @@ msix_config:
   msix_version: "1.0.0.0"
   logo_path: "assets/logo.png"
   capabilities: "internetClient, privateNetworkClientServer"
-  executable_name: "Billing APP.exe"
