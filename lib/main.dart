@@ -720,6 +720,36 @@ class LocalDatabase {
 
   static bool stockLoadFailed = false;
 
+  static Future<void> syncStockWithInventory() async {
+    bool changed = false;
+    globalInventory.forEach((categoryName, items) {
+      if (!globalStock.containsKey(categoryName)) {
+        globalStock[categoryName] = {};
+        changed = true;
+      }
+      if (!globalPurchaseRates.containsKey(categoryName)) {
+        globalPurchaseRates[categoryName] = {};
+        changed = true;
+      }
+      for (var item in items) {
+        String itemName = item['name'] ?? "";
+        if (itemName.isNotEmpty) {
+          if (!globalStock[categoryName]!.containsKey(itemName)) {
+            globalStock[categoryName]![itemName] = 0.0;
+            changed = true;
+          }
+          if (!globalPurchaseRates[categoryName]!.containsKey(itemName)) {
+            globalPurchaseRates[categoryName]![itemName] = 0.0;
+            changed = true;
+          }
+        }
+      }
+    });
+    if (changed) {
+      await saveStockToDisk();
+    }
+  }
+
   static Future<void> saveStockToDisk() async {
     if (stockLoadFailed) {
       debugPrint(
@@ -5793,20 +5823,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           actions: [
             IconButton(
               icon: const Icon(Icons.settings, color: Colors.white),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => WarehouseScreen(
-                    onEditBill: (jsonBill, originalPdfName) {
-                      Navigator.of(context).popUntil((route) => route.isFirst);
-                      _loadBillForEditing(jsonBill, originalPdfName);
-                    },
-                    onPrintBill: (jsonBill) => _printBillDirectly(jsonBill),
-                    onGeneratePdf: (jsonBill) =>
-                        _generatePdfBytesFromJson(jsonBill),
+              onPressed: () async {
+                await LocalDatabase.syncStockWithInventory();
+                if (!context.mounted) return;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => WarehouseScreen(
+                      onEditBill: (jsonBill, originalPdfName) {
+                        Navigator.of(
+                          context,
+                        ).popUntil((route) => route.isFirst);
+                        _loadBillForEditing(jsonBill, originalPdfName);
+                      },
+                      onPrintBill: (jsonBill) => _printBillDirectly(jsonBill),
+                      onGeneratePdf: (jsonBill) =>
+                          _generatePdfBytesFromJson(jsonBill),
+                    ),
                   ),
-                ),
-              ).then((_) => setState(() {})),
+                ).then((_) => setState(() {}));
+              },
             ),
           ],
         ),
