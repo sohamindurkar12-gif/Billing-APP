@@ -8088,32 +8088,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ],
             )
             .toList();
-        List<Uri> jsonBillFolders = [];
+        saf.DocumentFile? targetJsonDoc;
+
+        // 1. Check directly in the root folder (New behavior)
         for (var doc in childDocs) {
-          if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
-            // Obsolete
-            jsonBillFolders.add(doc.uri);
+          if (doc.name == jsonName) {
+            targetJsonDoc = doc;
+            break;
           }
         }
 
-        saf.DocumentFile? targetJsonDoc;
-        for (var folderUri in jsonBillFolders) {
-          final jsonDocs = await saf
-              .listFiles(
-                folderUri,
-                columns: [
-                  saf.DocumentFileColumn.displayName,
-                  saf.DocumentFileColumn.id,
-                ],
-              )
-              .toList();
-          for (var doc in jsonDocs) {
-            if (doc.name == jsonName) {
-              targetJsonDoc = doc;
-              break;
+        // 2. Check inside "JSON Bills" folders (Old backward compatible behavior)
+        if (targetJsonDoc == null) {
+          List<Uri> jsonBillFolders = [];
+          for (var doc in childDocs) {
+            if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+              jsonBillFolders.add(doc.uri);
             }
           }
-          if (targetJsonDoc != null) break;
+
+          for (var folderUri in jsonBillFolders) {
+            final jsonDocs = await saf
+                .listFiles(
+                  folderUri,
+                  columns: [
+                    saf.DocumentFileColumn.displayName,
+                    saf.DocumentFileColumn.id,
+                  ],
+                )
+                .toList();
+            for (var doc in jsonDocs) {
+              if (doc.name == jsonName) {
+                targetJsonDoc = doc;
+                break;
+              }
+            }
+            if (targetJsonDoc != null) break;
+          }
         }
 
         if (targetJsonDoc != null) {
@@ -8188,32 +8199,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ],
             )
             .toList();
-        List<Uri> jsonBillFolders = [];
+        saf.DocumentFile? targetJsonDoc;
+
+        // 1. Check directly in the root folder (New behavior)
         for (var doc in childDocs) {
-          if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
-            // Obsolete
-            jsonBillFolders.add(doc.uri);
+          if (doc.name == jsonName) {
+            targetJsonDoc = doc;
+            break;
           }
         }
 
-        saf.DocumentFile? targetJsonDoc;
-        for (var folderUri in jsonBillFolders) {
-          final jsonDocs = await saf
-              .listFiles(
-                folderUri,
-                columns: [
-                  saf.DocumentFileColumn.displayName,
-                  saf.DocumentFileColumn.id,
-                ],
-              )
-              .toList();
-          for (var doc in jsonDocs) {
-            if (doc.name == jsonName) {
-              targetJsonDoc = doc;
-              break;
+        // 2. Check inside "JSON Bills" folders (Old backward compatible behavior)
+        if (targetJsonDoc == null) {
+          List<Uri> jsonBillFolders = [];
+          for (var doc in childDocs) {
+            if (doc.name != null && doc.name!.startsWith("JSON Bills")) {
+              jsonBillFolders.add(doc.uri);
             }
           }
-          if (targetJsonDoc != null) break;
+
+          for (var folderUri in jsonBillFolders) {
+            final jsonDocs = await saf
+                .listFiles(
+                  folderUri,
+                  columns: [
+                    saf.DocumentFileColumn.displayName,
+                    saf.DocumentFileColumn.id,
+                  ],
+                )
+                .toList();
+            for (var doc in jsonDocs) {
+              if (doc.name == jsonName) {
+                targetJsonDoc = doc;
+                break;
+              }
+            }
+            if (targetJsonDoc != null) break;
+          }
         }
 
         if (targetJsonDoc != null) {
