@@ -718,7 +718,15 @@ class LocalDatabase {
     return folder.uri;
   }
 
+  static bool stockLoadFailed = false;
+
   static Future<void> saveStockToDisk() async {
+    if (stockLoadFailed) {
+      debugPrint(
+        "Skipping stock save because it failed to load previously, preventing data wipe.",
+      );
+      return;
+    }
     try {
       Map<String, dynamic> output = {};
       for (var cat in globalStock.keys) {
@@ -766,11 +774,13 @@ class LocalDatabase {
 
   static Future<void> loadStockFromDisk() async {
     try {
+      stockLoadFailed = false;
       String? content;
       if (Platform.isWindows) {
         String fileStr = "${_getWindowsSettingsDir()}\\stock.json";
         if (File(fileStr).existsSync()) {
           content = await File(fileStr).readAsString();
+          if (content.trim().isEmpty) stockLoadFailed = true;
         }
       } else {
         final settingsUri = await getSettingsFolderUri();
@@ -778,11 +788,18 @@ class LocalDatabase {
         var file = await saf.child(settingsUri, 'stock.json');
         if (file != null) {
           final bytes = await saf.getDocumentContent(file.uri);
-          if (bytes != null) content = utf8.decode(bytes);
+          if (bytes != null) {
+            content = utf8.decode(bytes);
+          } else {
+            stockLoadFailed = true;
+          }
+          if (content != null && content.trim().isEmpty) {
+            stockLoadFailed = true;
+          }
         }
       }
 
-      if (content != null) {
+      if (content != null && content.trim().isNotEmpty) {
         Map<String, dynamic> decoded = jsonDecode(content);
         globalStock = {};
         globalPurchaseRates = {};
@@ -810,6 +827,7 @@ class LocalDatabase {
       }
     } catch (e) {
       debugPrint("Error loading stock: $e");
+      stockLoadFailed = true;
     }
   }
 }
@@ -9780,6 +9798,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                             isEditing: true,
                             categoryNameController: nameCtrl,
                           );
+                          bool categoryRenamed = false;
                           if (newColor != null) {
                             setState(() {
                               String newName = nameCtrl.text.trim();
@@ -9798,6 +9817,19 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                                   globalInventory = newInventory;
                                   globalCategoryColors[newName] = newColor;
                                   globalCategoryColors.remove(oldName);
+
+                                  if (globalStock.containsKey(oldName)) {
+                                    globalStock[newName] = globalStock.remove(
+                                      oldName,
+                                    )!;
+                                  }
+                                  if (globalPurchaseRates.containsKey(
+                                    oldName,
+                                  )) {
+                                    globalPurchaseRates[newName] =
+                                        globalPurchaseRates.remove(oldName)!;
+                                  }
+                                  categoryRenamed = true;
                                 } else {
                                   globalCategoryColors[oldName] = newColor;
                                 }
@@ -9806,6 +9838,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                               }
                             });
                             await LocalDatabase.saveToDisk();
+                            if (categoryRenamed) {
+                              await LocalDatabase.saveStockToDisk();
+                            }
                           }
                         },
                         child: Container(
@@ -10429,9 +10464,47 @@ class _ItemDetailScreenState extends State<ItemDetailScreen> {
                                     items[_editingIndex!]['id'] ??
                                     DateTime.now().millisecondsSinceEpoch
                                         .toString();
+
+                                String oldItemName =
+                                    items[_editingIndex!]['name'] ?? "";
+                                String newItemName = data['name'] ?? "";
+                                bool itemRenamed = false;
+                                if (oldItemName.isNotEmpty &&
+                                    newItemName != oldItemName) {
+                                  if (globalStock.containsKey(
+                                    widget.categoryName,
+                                  )) {
+                                    if (globalStock[widget.categoryName]!
+                                        .containsKey(oldItemName)) {
+                                      globalStock[widget
+                                              .categoryName]![newItemName] =
+                                          globalStock[widget.categoryName]!
+                                              .remove(oldItemName)!;
+                                      itemRenamed = true;
+                                    }
+                                  }
+                                  if (globalPurchaseRates.containsKey(
+                                    widget.categoryName,
+                                  )) {
+                                    if (globalPurchaseRates[widget
+                                            .categoryName]!
+                                        .containsKey(oldItemName)) {
+                                      globalPurchaseRates[widget
+                                              .categoryName]![newItemName] =
+                                          globalPurchaseRates[widget
+                                                  .categoryName]!
+                                              .remove(oldItemName)!;
+                                      itemRenamed = true;
+                                    }
+                                  }
+                                }
+
                                 items[_editingIndex!] = data;
                                 _editingIndex = null;
                                 await LocalDatabase.saveToDisk();
+                                if (itemRenamed) {
+                                  await LocalDatabase.saveStockToDisk();
+                                }
                                 _englishNameController.clear();
                                 _regionalNameController.clear();
                                 _r.clear();
