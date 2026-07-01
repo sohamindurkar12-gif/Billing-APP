@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:594735884693:android:512892312fe4e206a1ae9c",
         "android_client_info": {
-          "package_name": "com.example.billing_app"
+          "package_name": "com.soham.billingapp"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "594735884693-22aimurigepdka5npj3kn0vko23sjdkv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.billing_app",
+            "package_name": "com.soham.billingapp",
             "certificate_hash": "d541d3c929560bb5b8c2759f85395d5c8caf2046"
           }
         },
