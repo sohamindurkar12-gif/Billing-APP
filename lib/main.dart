@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:shared_storage/shared_storage.dart' as saf;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart';
@@ -28,6 +29,10 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 void main() async {
   // Ensures all Flutter components are completely bound and ready before modifying platform UI settings
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isWindows) {
+    final docsDir = await getApplicationDocumentsDirectory();
+    globalWindowsBaseDir = docsDir.path;
+  }
 
   if (Platform.isWindows || Platform.isLinux) {
     await GoogleSignInDart.register(
@@ -188,6 +193,7 @@ Map<String, Map<String, double>> globalStock = {};
 Map<String, Map<String, double>> globalPurchaseRates = {};
 List<Map<String, dynamic>> globalParties = [];
 Map<String, String> globalCategoryColors = {};
+String globalWindowsBaseDir = "";
 String currentLayoutSetting = "HL";
 String globalShopName = "RETAIL INVOICE";
 String globalWhatsappNumber = "";
@@ -369,11 +375,11 @@ Future<String?> showColorPickerDialog(
 // --- LOCAL STORAGE HELPER LOGIC ---
 class LocalDatabase {
   static String _getWindowsSettingsDir() {
-    return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\INTERNAL_SETTINGS";
+    return "${globalWindowsBaseDir}\\Billing APP\\INTERNAL_SETTINGS";
   }
 
   static String _getWindowsBackupsDir() {
-    return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\INVENTORY BACKUPS";
+    return "${globalWindowsBaseDir}\\Billing APP\\INVENTORY BACKUPS";
   }
 
   static Future<bool> hasLocalBills() async {
@@ -400,7 +406,7 @@ class LocalDatabase {
   }
 
   static String _getWindowsBillsDir() {
-    return "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\MYBILLS";
+    return "${globalWindowsBaseDir}\\Billing APP\\MYBILLS";
   }
 
   static Future<void> ensureAllDirectoriesExist() async {
@@ -409,7 +415,7 @@ class LocalDatabase {
       Directory(_getWindowsBackupsDir()).createSync(recursive: true);
       Directory(_getWindowsBillsDir()).createSync(recursive: true);
       Directory(
-        "${File(Platform.resolvedExecutable).parent.path}\\Billing APP\\ACCOUNTS",
+        "${globalWindowsBaseDir}\\Billing APP\\ACCOUNTS",
       ).createSync(recursive: true);
     } else {
       await getSettingsFolderUri();
@@ -1363,7 +1369,7 @@ class CloudDatabase {
         String fileName = "${docSnapshot.id}.json";
 
         if (Platform.isWindows) {
-          String baseDir = File(Platform.resolvedExecutable).parent.path;
+          String baseDir = globalWindowsBaseDir;
           String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\$fileName";
           Directory(
             "$baseDir\\Billing APP\\MYBILLS",
@@ -1418,7 +1424,7 @@ class CloudDatabase {
       Set<String> cloudBillIds = querySnapshot.docs.map((d) => d.id).toSet();
 
       if (Platform.isWindows) {
-        String baseDir = File(Platform.resolvedExecutable).parent.path;
+        String baseDir = globalWindowsBaseDir;
         String dir = "$baseDir\\Billing APP\\MYBILLS";
         Directory myBillsDir = Directory(dir);
         if (myBillsDir.existsSync()) {
@@ -2354,7 +2360,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String jsonString = jsonEncode(jsonBill);
 
     if (Platform.isWindows) {
-      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String baseDir = globalWindowsBaseDir;
       String dir = "$baseDir\\Billing APP\\MYBILLS";
       String jsonDir = dir;
       Directory(dir).createSync(recursive: true);
@@ -8108,7 +8114,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     String jsonName = pdfName.replaceAll('.pdf', '.json');
     if (Platform.isWindows) {
-      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String baseDir = globalWindowsBaseDir;
       String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\$jsonName";
       File jsonFile = File(jsonPath);
       if (await jsonFile.exists()) {
@@ -8219,7 +8225,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
     String jsonName = pdfName.replaceAll('.pdf', '.json');
     if (Platform.isWindows) {
-      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String baseDir = globalWindowsBaseDir;
       String jsonPath = "$baseDir\\Billing APP\\MYBILLS\\$jsonName";
       File jsonFile = File(jsonPath);
       if (await jsonFile.exists()) {
@@ -8601,7 +8607,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _loadHistory() async {
     if (Platform.isWindows) {
-      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String baseDir = globalWindowsBaseDir;
       String dir = "$baseDir\\Billing APP\\MYBILLS";
       Directory myBillsDir = Directory(dir);
       if (myBillsDir.existsSync()) {
@@ -9276,7 +9282,7 @@ class _LedgerHistoryScreenState extends State<LedgerHistoryScreen> {
 
   Future<void> _loadHistory() async {
     if (Platform.isWindows) {
-      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String baseDir = globalWindowsBaseDir;
       String dir = "$baseDir\\Billing APP\\ACCOUNTS";
       Directory myBillsDir = Directory(dir);
       if (myBillsDir.existsSync()) {
@@ -11569,7 +11575,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     String? jsonFileName;
 
     if (Platform.isWindows) {
-      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String baseDir = globalWindowsBaseDir;
       String jsonPath = "$baseDir\\Billing APP\\MYBILLS";
       Directory jsonDir = Directory(jsonPath);
       if (jsonDir.existsSync()) {
@@ -11979,7 +11985,7 @@ class _PartyLedgerScreenState extends State<PartyLedgerScreen> {
     );
 
     if (Platform.isWindows) {
-      String baseDir = File(Platform.resolvedExecutable).parent.path;
+      String baseDir = globalWindowsBaseDir;
       String dir = "$baseDir\\Billing APP\\ACCOUNTS";
       Directory(dir).createSync(recursive: true);
       File file = File("$dir\\$finalFileName.pdf");
