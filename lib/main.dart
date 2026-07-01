@@ -6328,7 +6328,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   ),
                 ] else if (isVIP) ...[
                   const Text(
-                    "Hurray!! YOU ARE VIP USER",
+                    "Hurray!! YOU ARE AN AUTHORIZED TESTER",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.green,
@@ -6345,7 +6345,7 @@ class _SetupScreenState extends State<SetupScreen> {
                   ),
                 ] else ...[
                   const Text(
-                    "SORRY , YOU ARE NOT VIP USER",
+                    "ACCESS DENIED",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.red,
@@ -6353,7 +6353,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   ),
                   const Text(
-                    "ONLY VIP USERS CAN USE CLOUD SYNC",
+                    "ONLY AUTHORIZED TESTERS CAN USE CLOUD SYNC",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.red,
@@ -6361,15 +6361,7 @@ class _SetupScreenState extends State<SetupScreen> {
                     ),
                   ),
                   const Text(
-                    "TO BECOME VIP USER PLS CONTACT",
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Text(
-                    "SHRINIVAS PHUKE OR SOHAM INDURKAR",
+                    "THIS FEATURE IS CURRENTLY IN PRIVATE BETA",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.red,
