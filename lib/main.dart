@@ -2864,6 +2864,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
 
           String unit = item['unit'] ?? "";
+          if (unit == "GRAM") {
+            unit = "gm";
+          }
           String qtyStr = "${item['qty']} $unit".trim();
           double rateVal = double.tryParse(item['rate'].toString()) ?? 0.0;
           double totalVal = double.tryParse(item['total'].toString()) ?? 0.0;
@@ -3140,6 +3143,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
 
           String unit = item['unit'] ?? "";
+          if (unit == "GRAM") {
+            unit = "gm";
+          }
           String qtyStr = "${item['qty']} $unit".trim();
 
           double rateVal = double.tryParse(item['rate'].toString()) ?? 0.0;
@@ -3629,7 +3635,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     bool globalShowRateSetting =
         _isEditingBill && _editingShowRateColumn != null
         ? _editingShowRateColumn!
-        : true;
+        : false;
 
     final dateRegex = RegExp(
       r'^(0[1-9]|[12]\d|3[01])[-./](0[1-9]|1[0-2])[-./]\d{4}$',
@@ -3855,7 +3861,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 materialTapTargetSize:
                                     MaterialTapTargetSize.shrinkWrap,
                                 onChanged: (val) => setPopupState(
-                                  () => globalShowRateSetting = val ?? true,
+                                  () => globalShowRateSetting = val ?? false,
                                 ),
                               ),
                             ],
@@ -6317,6 +6323,15 @@ class _SetupScreenState extends State<SetupScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Feature coming soon...",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ] else if (!hasInternet) ...[
                   Text(
                     "CONNECT TO INTERNET TO USE CLOUD SYNC",
@@ -6776,21 +6791,19 @@ class _SetupScreenState extends State<SetupScreen> {
               onTap: _isSigningIn
                   ? null
                   : (currentFirebaseUser == null
-                        ? _handleGoogleSignIn
+                        ? null // DISABLED: _handleGoogleSignIn
                         : _handleSignOut),
               child: Container(
                 width: double.infinity,
                 height: 60,
                 decoration: BoxDecoration(
                   color: currentFirebaseUser == null
-                      ? (isDark ? Colors.blueGrey[800] : Colors.blueGrey[50])
+                      ? Colors.grey.withOpacity(0.3) // Faint grey
                       : Colors.green.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: currentFirebaseUser == null
-                        ? (isDark
-                              ? Colors.blueGrey[700]!
-                              : Colors.blueGrey.shade200)
+                        ? Colors.grey.shade400
                         : Colors.green,
                   ),
                 ),
@@ -6808,7 +6821,11 @@ class _SetupScreenState extends State<SetupScreen> {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 if (currentFirebaseUser == null)
-                                  const Icon(Icons.login, size: 20)
+                                  const Icon(
+                                    Icons.login,
+                                    size: 20,
+                                    color: Colors.grey,
+                                  )
                                 else
                                   const Icon(
                                     Icons.check_circle,
@@ -6824,12 +6841,21 @@ class _SetupScreenState extends State<SetupScreen> {
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
                                     color: currentFirebaseUser == null
-                                        ? null
+                                        ? Colors.grey
                                         : Colors.green,
                                   ),
                                 ),
                               ],
                             ),
+                            if (currentFirebaseUser == null)
+                              const Text(
+                                "Feature coming soon...",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
                             if (currentFirebaseUser != null)
                               Text(
                                 "${currentFirebaseUser!.email?.toLowerCase() ?? 'user'} (TAP TO LOGOUT)",
