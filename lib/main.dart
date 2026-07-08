@@ -2316,6 +2316,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           rawEnglishName = rawEnglishName.split(" (").first;
         }
         double qty = double.tryParse(item['qty'].toString()) ?? 0.0;
+        String unit = (item['unit'] ?? "").toString().toUpperCase();
+        if (unit == "GRAM" || unit == "ML") {
+          qty = qty / 1000.0;
+        }
         for (String cat in globalStock.keys) {
           if (globalStock[cat]!.containsKey(rawEnglishName)) {
             if (_editingOriginalPartyTransactionType == "SALES") {
@@ -2338,6 +2342,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         rawEnglishName = rawEnglishName.split(" (").first;
       }
       double qty = double.tryParse(item['qty'].toString()) ?? 0.0;
+      String unit = (item['unit'] ?? "").toString().toUpperCase();
+      if (unit == "GRAM" || unit == "ML") {
+        qty = qty / 1000.0;
+      }
       double rate = double.tryParse(item['rate'].toString()) ?? 0.0;
 
       for (String cat in globalStock.keys) {
