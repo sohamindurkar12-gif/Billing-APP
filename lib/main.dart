@@ -14050,9 +14050,9 @@ class _ActivationScreenState extends State<ActivationScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    "TAP THE BOX BELOW TO GENERATE THE 'DEVICE ID' AND PLEASE CONTACT TO MR. SHRINIVAS PHUKE TO GET THE ACTIVATION CODE ONCE YOU GIVE THEM DEVICE ID",
+                    "TAP THE BOX BELOW TO GENERATE THE 'DEVICE ID' AND PLEASE CONTACT TO MR. SHRINIVAS PHUKE AT MOBILE NUMBER : +91 94035 24999 TO GET THE ACTIVATION CODE ONCE YOU GIVE THEM DEVICE ID",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
