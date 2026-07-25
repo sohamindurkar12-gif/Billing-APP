@@ -3,24 +3,20 @@
 ; Non-commercial use only
 
 #define MyAppName "Billing APP"
-#define MyAppVersion "1.0"
-#define MyAppPublisher "SOHAM INDURKAR"
-#define MyAppURL "https://billing-app-61a0e.firebaseapp.com/"
-#define MyAppExeName "Billing APP.exe"
+#define MyAppVersion "1.0.0"
+#define MyAppPublisher "SOHAM GURUNATH INDURKAR"
+#define MyAppExeName "smart_billing_system.exe"
 #expr EmitLanguagesSection
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application. Do not use the same AppId value in installers for other applications.
 ; (To generate a new GUID, click Tools | Generate GUID inside the IDE.)
-AppId={{5A68AC18-C30A-46C9-82A0-841FE7166C08}
+AppId={{6B0CD810-DFA5-457D-9C69-03BD43DD39AE}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 ;AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL={#MyAppURL}
-AppSupportURL={#MyAppURL}
-AppUpdatesURL={#MyAppURL}
-DefaultDirName={localappdata}\{#MyAppName}
+DefaultDirName={autopf}\{#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; "ArchitecturesAllowed=x64compatible" specifies that Setup cannot run
 ; on anything but x64 and Windows 11 on Arm.
@@ -35,7 +31,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 DisableProgramGroupPage=yes
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired=lowest
-OutputDir=C:\Projects\Billing APP
+OutputDir=C:\Users\soham\Downloads
 OutputBaseFilename=BillingAPP_Setup
 SetupIconFile=C:\Users\soham\Downloads\app_icon.ico
 SolidCompression=yes
