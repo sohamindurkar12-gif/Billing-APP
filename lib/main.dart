@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:ui' as ui;
 import 'package:image/image.dart' as img;
@@ -180,7 +181,7 @@ class _SmartBillingAppState extends State<SmartBillingApp> {
               margin: EdgeInsets.all(8),
             ),
           ),
-          home: DashboardScreen(),
+          home: const ActivationWrapper(),
         );
       },
     );
@@ -13897,6 +13898,381 @@ class _PrinterConfigurationScreenState
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- ACTIVATION LOGIC ---
+
+class ActivationWrapper extends StatefulWidget {
+  const ActivationWrapper({Key? key}) : super(key: key);
+
+  @override
+  State<ActivationWrapper> createState() => _ActivationWrapperState();
+}
+
+class _ActivationWrapperState extends State<ActivationWrapper> {
+  bool? isActivated;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActivation();
+  }
+
+  Future<void> _checkActivation() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool activated = prefs.getBool('isActivated') ?? false;
+    setState(() {
+      isActivated = activated;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isActivated == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (isActivated == true) {
+      return const DashboardScreen();
+    }
+    return const ActivationScreen();
+  }
+}
+
+class ActivationScreen extends StatefulWidget {
+  const ActivationScreen({Key? key}) : super(key: key);
+
+  @override
+  State<ActivationScreen> createState() => _ActivationScreenState();
+}
+
+class _ActivationScreenState extends State<ActivationScreen> {
+  int step = 1; // 1 = Generate, 2 = Verify
+  int? deviceId;
+  String verificationStatus = "";
+  TextEditingController codeController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDeviceId();
+  }
+
+  Future<void> _loadDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    int? savedId = prefs.getInt('deviceId');
+    if (savedId != null) {
+      setState(() {
+        deviceId = savedId;
+      });
+    }
+  }
+
+  Future<void> _generateDeviceId() async {
+    final random = math.Random();
+    int newId = 100000 + random.nextInt(200001);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('deviceId', newId);
+    setState(() {
+      deviceId = newId;
+    });
+  }
+
+  Future<void> _verifyAndSave() async {
+    if (deviceId == null) return;
+    int? enteredCode = int.tryParse(codeController.text);
+    if (enteredCode == null) {
+      setState(() {
+        verificationStatus = "VERIFICATION FAILED";
+      });
+      return;
+    }
+
+    int expectedCode = (deviceId! * 2) + 247655;
+    if (enteredCode == expectedCode) {
+      setState(() {
+        verificationStatus = "VERIFICATION SUCCESSFUL";
+      });
+    } else {
+      setState(() {
+        verificationStatus = "VERIFICATION FAILED";
+      });
+    }
+  }
+
+  Future<void> _completeActivation() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isActivated', true);
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.blueGrey.shade900,
+      body: Center(
+        child: SingleChildScrollView(
+          child: Container(
+            width: MediaQuery.of(context).size.width > 600
+                ? 500
+                : MediaQuery.of(context).size.width * 0.9,
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  "NEW DEVICE DETECTED, ACTIVATION NEEDED",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blueGrey,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (step == 1) ...[
+                  const Text(
+                    "HELLO NEW USER!! APP HAS DETECTED THAT THIS IS A NEW DEVICE SO YOU WILL NEED TO ACTIVATE THE APP ONCE FOR THE FIRST TIME TO USE FREELY",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    "TAP THE BOX BELOW TO GENERATE THE 'DEVICE ID' AND PLEASE CONTACT TO MR. SHRINIVAS PHUKE TO GET THE ACTIVATION CODE ONCE YOU GIVE THEM DEVICE ID",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                      ),
+                      onPressed: deviceId == null ? _generateDeviceId : null,
+                      child: const Text(
+                        "GENERATE THE DEVICE ID",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const Text(
+                  "YOUR DEVICE ID IS :",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 7,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade400),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          deviceId == null ? "------" : deviceId.toString(),
+                          style: TextStyle(
+                            fontSize: 20,
+                            letterSpacing: 4,
+                            fontWeight: FontWeight.bold,
+                            color: deviceId == null
+                                ? Colors.grey
+                                : Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 3,
+                      child: SizedBox(
+                        height: 60,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: deviceId == null
+                                ? Colors.grey.shade300
+                                : Colors.blueGrey,
+                            foregroundColor: deviceId == null
+                                ? Colors.grey
+                                : Colors.white,
+                          ),
+                          onPressed: deviceId == null
+                              ? null
+                              : () {
+                                  Clipboard.setData(
+                                    ClipboardData(text: deviceId.toString()),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        "Device ID copied to clipboard!",
+                                      ),
+                                    ),
+                                  );
+                                },
+                          child: const Text(
+                            "COPY",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                if (step == 1) ...[
+                  const Text(
+                    "CLICK 'NEXT' TO ENTER ACTIVATION CODE",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: deviceId == null
+                            ? Colors.grey.shade300
+                            : Colors.green,
+                        foregroundColor: deviceId == null
+                            ? Colors.grey
+                            : Colors.white,
+                      ),
+                      onPressed: deviceId == null
+                          ? null
+                          : () {
+                              setState(() {
+                                step = 2;
+                              });
+                            },
+                      child: const Text(
+                        "NEXT",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+                if (step == 2) ...[
+                  const Text(
+                    "ENTER YOUR ACTIVATON CODE HERE :",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: codeController,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onChanged: (val) {
+                      setState(() {
+                        verificationStatus = ""; // reset on typing
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      hintText: "Enter 6 digit code",
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "PLEASE CLICK 'VERIFY' BUTTON TO VERIFY THE ACTIVATION CODE",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: codeController.text.length >= 6
+                                ? Colors.blue
+                                : Colors.grey.shade300,
+                            foregroundColor: codeController.text.length >= 6
+                                ? Colors.white
+                                : Colors.grey,
+                          ),
+                          onPressed: codeController.text.length >= 6
+                              ? _verifyAndSave
+                              : null,
+                          child: const Text(
+                            "VERIFY",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            verificationStatus,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                              color:
+                                  verificationStatus ==
+                                      "VERIFICATION SUCCESSFUL"
+                                  ? Colors.green
+                                  : (verificationStatus == "VERIFICATION FAILED"
+                                        ? Colors.red
+                                        : Colors.transparent),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            verificationStatus == "VERIFICATION SUCCESSFUL"
+                            ? Colors.green
+                            : Colors.grey.shade300,
+                        foregroundColor:
+                            verificationStatus == "VERIFICATION SUCCESSFUL"
+                            ? Colors.white
+                            : Colors.grey,
+                      ),
+                      onPressed: verificationStatus == "VERIFICATION SUCCESSFUL"
+                          ? _completeActivation
+                          : null,
+                      child: const Text(
+                        "SAVE & OPEN THE BEST BILLING APP",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
